@@ -45,6 +45,7 @@ jobs:
           otlp-headers: ${{ env.OTEL_EXPORTER_OTLP_HEADERS }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           summary-only: ${{ env.OTEL_EXPORTER_OTLP_ENDPOINT == '' }}
+          enable-traces: false
           additional-resource-attributes: test_run=true,stress_profile=${{ inputs.stress_profile }}
 
       - name: CPU pressure

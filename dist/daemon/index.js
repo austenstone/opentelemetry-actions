@@ -34207,33 +34207,23 @@ function buildGitHubContext() {
     };
 }
 function buildSampleAttributes(github) {
-    return {
-        repository: github.repository,
-        workflow: github.workflow,
-        workflow_ref: github.workflowRef,
-        workflow_sha: github.workflowSha,
-        job: github.job,
-        run_id: github.runId,
-        run_attempt: github.runAttempt,
-        actor: github.actor,
-        triggering_actor: github.triggeringActor,
-        git_ref: github.ref,
-        ref_name: github.refName,
-        sha: github.sha,
-        runner_name: github.runnerName,
-        runner_os: github.runnerOs,
-        runner_arch: github.runnerArch,
-    };
+    void github;
+    return {};
 }
 function buildResourceAttributes(serviceName, github, additionalResourceAttributes) {
     return {
         'service.name': serviceName,
         'github.repository': github.repository,
         'github.workflow': github.workflow,
+        'github.workflow_ref': github.workflowRef,
+        'github.workflow_sha': github.workflowSha,
         'github.job': github.job,
         'github.run_id': github.runId,
         'github.run_attempt': github.runAttempt,
+        'github.actor': github.actor,
+        'github.triggering_actor': github.triggeringActor,
         'github.ref': github.ref,
+        'github.ref_name': github.refName,
         'github.sha': github.sha,
         'github.runner_name': github.runnerName,
         'github.runner_os': github.runnerOs,
