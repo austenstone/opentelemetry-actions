@@ -145,6 +145,13 @@ export interface TraceExportResult {
   workflowJobs: number;
 }
 
+export interface RawArtifactUploadResult {
+  name: string;
+  id?: number;
+  size?: number;
+  digest?: string;
+}
+
 export interface RawTelemetryBundle {
   exportedAt: string;
   summaryOnly: boolean;

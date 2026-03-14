@@ -1,9 +1,53 @@
 import { readFile, writeFile } from 'node:fs/promises';
+import * as path from 'node:path';
 
 import { buildJobSummaryMarkdown, summarizeSamples } from './summary';
 import { fileExists, parseSamplesFile, sleep, STATE_KEYS } from './shared';
 import { exportWorkflowTrace } from './tracing';
-import type { ActionConfig, RawTelemetryBundle, RunnerSummary, SampleSnapshot, TraceExportResult } from './types';
+import type {
+  ActionConfig,
+  RawArtifactUploadResult,
+  RawTelemetryBundle,
+  RunnerSummary,
+  SampleSnapshot,
+  TraceExportResult,
+} from './types';
+
+function buildArtifactName(config: ActionConfig): string {
+  const jobSegment = config.github.job.replace(/[^A-Za-z0-9._-]+/g, '-');
+  return `raw-runner-telemetry-${config.github.runId}-${config.github.runAttempt}-${jobSegment}`;
+}
+
+async function uploadRawBundleArtifact(
+  config: ActionConfig,
+): Promise<RawArtifactUploadResult | null> {
+  if (!config.summaryOnly) {
+    return null;
+  }
+
+  if (!(await fileExists(config.paths.rawBundle))) {
+    return null;
+  }
+
+  const artifact = await import('@actions/artifact');
+  const artifactName = buildArtifactName(config);
+  const uploadResult = await artifact.default.uploadArtifact(
+    artifactName,
+    [config.paths.rawBundle],
+    path.dirname(config.paths.rawBundle),
+    {
+      compressionLevel: 6,
+      retentionDays: 7,
+    },
+  );
+
+  return {
+    name: artifactName,
+    id: uploadResult.id,
+    size: uploadResult.size,
+    digest: uploadResult.digest,
+  };
+}
 
 async function waitForSummary(summaryPath: string, fallbackSamplesPath: string): Promise<void> {
   for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -123,9 +167,25 @@ async function run(): Promise<void> {
   await writeRawBundle(config, summary, samples, traceResult, daemonError);
   core.notice(`Raw telemetry bundle written to ${config.paths.rawBundle}.`);
 
+  let artifactSummaryLine = '';
+  try {
+    const artifactResult = await uploadRawBundleArtifact(config);
+    if (artifactResult) {
+      artifactSummaryLine = `**Raw telemetry artifact:** \`${artifactResult.name}\``;
+      core.notice(
+        `Uploaded raw telemetry artifact ${artifactResult.name}${artifactResult.id ? ` (id ${artifactResult.id})` : ''}.`,
+      );
+    }
+  } catch (error: unknown) {
+    core.warning(
+      `Failed to upload raw telemetry artifact: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
   if (config.enableJobSummary && process.env.GITHUB_STEP_SUMMARY) {
     const markdown = buildJobSummaryMarkdown(summary);
-    await core.summary.addRaw(traceSummaryLine ? `${traceSummaryLine}\n\n${markdown}` : markdown).write();
+    const headerLines = [traceSummaryLine, artifactSummaryLine].filter(Boolean).join('\n\n');
+    await core.summary.addRaw(headerLines ? `${headerLines}\n\n${markdown}` : markdown).write();
   }
 
   if (summary.recommendation.sizing === 'move-to-larger-runner') {

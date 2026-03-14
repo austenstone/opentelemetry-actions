@@ -63,11 +63,3 @@ jobs:
       - name: Verify summary artifact path
         if: always()
         run: echo "Look for the runner telemetry summary in the job summary panel."
-
-      - name: Upload raw telemetry artifact
-        if: always()
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
-        with:
-          name: raw-runner-telemetry-${{ github.run_id }}
-          path: ${{ steps.telemetry.outputs.raw-bundle-path }}
-          if-no-files-found: error

@@ -135,7 +135,17 @@ The action also writes a raw telemetry bundle at the `raw-bundle-path` output co
 - optional trace metadata
 - daemon error text if sampling had issues
 
-You can upload that bundle as a workflow artifact:
+In `summary-only` mode, the action uploads that raw bundle as a GitHub Actions artifact automatically from its `post` step.
+
+The artifact name format is:
+
+```text
+raw-runner-telemetry-<run_id>-<run_attempt>-<job>
+```
+
+If you still want the raw file path for custom handling, the `raw-bundle-path` output is available during the job.
+
+Example:
 
 ```yaml
 - name: Runner sizing summary only
@@ -144,12 +154,9 @@ You can upload that bundle as a workflow artifact:
   with:
     summary-only: true
 
-- name: Upload raw telemetry bundle
+- name: Print raw bundle path
   if: always()
-  uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
-  with:
-    name: raw-runner-telemetry-${{ github.run_id }}
-    path: ${{ steps.telemetry.outputs.raw-bundle-path }}
+  run: echo "Raw bundle path: ${{ steps.telemetry.outputs.raw-bundle-path }}"
 ```
 
 ### 3. Read the job summary
@@ -161,7 +168,7 @@ At the end of the job the action writes a markdown summary with:
 - larger runner recommendation
 - custom image candidate flag
 
-In summary-only mode, the included `test-action.yml` workflow uploads the raw telemetry bundle as an artifact automatically.
+In summary-only mode, the included `test-action.yml` workflow relies on the action itself to upload the raw telemetry artifact automatically.
 
 ## Included workflows
 
