@@ -87,6 +87,15 @@ That gives you a clean customer narrative:
 
 ## Quick start
 
+### Runtime compatibility
+
+This action now runs on **Node.js 24**.
+
+- JavaScript actions in this repo use the Node 24 runtime
+- bundled workflows pin Node 24-compatible versions of `actions/checkout` and `actions/setup-node`
+- GitHub-hosted runners are already compatible
+- for self-hosted runners, make sure the runner version is at least `v2.327.1`
+
 ### 1. Point the action at an OTLP endpoint
 
 Set these secrets in the repository or organization:

@@ -86,6 +86,6 @@ outputs:
   raw-bundle-path:
     description: JSON file containing the raw telemetry bundle with config, samples, summary, and optional trace metadata
 runs:
-  using: node20
+  using: node24
   main: dist/main/index.js
   post: dist/post/index.js
