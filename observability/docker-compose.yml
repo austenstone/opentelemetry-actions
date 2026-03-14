@@ -32,7 +32,7 @@ services:
 
   ngrok:
     profiles: ["tunnel"]
-    image: ngrok/ngrok:3.27.0
+    image: ngrok/ngrok:latest
     depends_on:
       - otel-collector
     environment:
