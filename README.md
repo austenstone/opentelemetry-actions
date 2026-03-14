@@ -205,11 +205,65 @@ It preinstalls:
 - `stress-ng`
 - `sysstat`
 - `unzip`
+- `otelcol-contrib`
 
 That makes it easier to separate:
 
 - **runtime setup waste**
 - **actual CPU / RAM / disk contention**
+
+### Autonomous custom-image telemetry mode
+
+If you use the generated custom image on a larger runner, you can collect runner host metrics
+without calling this action at all.
+
+The image bakes in:
+
+- `otelcol-contrib`
+- a pre-job hook at `/opt/runner/pre-job.sh`
+- a post-job hook at `/opt/runner/post-job.sh`
+- a runtime config generator at `/opt/runner/render-otel-config.py`
+- helper install scripts from `scripts/custom-image/`
+
+That means every workflow job running on the custom-image runner starts a background collector
+automatically before the first step and stops it after the final step.
+
+The baked collector:
+
+- scrapes host CPU, memory, filesystem, disk, load, network, and process metrics
+- can export upstream automatically if shared org-level settings are present
+
+Recommended shared org settings:
+
+- org variable: `RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT`
+- org secret: `RUNNER_OTEL_EXPORTER_OTLP_HEADERS` (optional)
+- org variable: `RUNNER_OTEL_RESOURCE_ATTRIBUTES` (optional comma-delimited key/value pairs)
+
+Optional shared org variables for fleet metadata:
+
+- `RUNNER_OTEL_SERVICE_NAME`
+- `RUNNER_OTEL_ENVIRONMENT`
+- `RUNNER_OTEL_TEAM`
+- `RUNNER_OTEL_CLASS`
+- `RUNNER_OTEL_REPO_TYPE`
+- `RUNNER_OTEL_BENCHMARK`
+
+Example workflow env when using the custom-image runner:
+
+```yaml
+env:
+  RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT }}
+  RUNNER_OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.RUNNER_OTEL_EXPORTER_OTLP_HEADERS }}
+  RUNNER_OTEL_RESOURCE_ATTRIBUTES: >-
+    team=actions,environment=prod,runner_class=larger
+```
+
+With that setup, the custom image gives you always-on runner hostmetrics for the whole job.
+No explicit `uses: ./` step is required.
+
+Important tradeoff: this autonomous collector mode replaces the action for telemetry shipping,
+but it does **not** reproduce the action-specific markdown summary, raw telemetry artifact, or
+rightsizing recommendation logic. If you want those outputs, keep using the action.
 
 ## Local demo stack
 

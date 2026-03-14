@@ -8,14 +8,24 @@ on:
 jobs:
   snapshot:
     runs-on: your-image-generation-runner
+    env:
+      OTELCOL_VERSION: 0.121.0
     snapshot:
       image-name: otel-runner-base
       version: 1.*
     steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
       - name: Install benchmarking and observability tooling
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq fio stress-ng sysstat unzip
+          sudo OTELCOL_VERSION="$OTELCOL_VERSION" bash ./scripts/custom-image/install-otel.sh
+          sudo chmod +x /opt/runner/pre-job.sh /opt/runner/post-job.sh
+
+          sudo tee -a /etc/environment >/dev/null <<'EOF'
+          ACTIONS_RUNNER_HOOK_JOB_STARTED=/opt/runner/pre-job.sh
+          ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/opt/runner/post-job.sh
+          EOF
 
       - name: Prime common toolchain caches
         run: |
@@ -23,11 +33,20 @@ jobs:
           npm --version || true
           python3 --version || true
           java -version || true
+          otelcol-contrib --version || true
 
       - name: Explain why this image exists
         run: |
           cat <<'EOF'
-          This image pre-installs benchmarking utilities and common build tooling.
+          This image pre-installs benchmarking utilities, the OpenTelemetry Collector,
+          and common build tooling.
           The goal is to reduce setup time so you can separate “runner too small”
           from “we keep reinstalling the world on every job.”
+          The collector binary is available at /usr/local/bin/otelcol-contrib and
+          a runtime config is generated automatically by /opt/runner/render-otel-config.py.
+          Pre- and post-job hooks are installed at /opt/runner/pre-job.sh and /opt/runner/post-job.sh.
+          The collector runs in the background for the duration of every workflow job on runners using this image.
+          Set organization-level variables or secrets for RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT,
+          RUNNER_OTEL_EXPORTER_OTLP_HEADERS, and optional RUNNER_OTEL_RESOURCE_ATTRIBUTES,
+          then expose them to workflows so every runner using this image ships telemetry automatically.
           EOF
