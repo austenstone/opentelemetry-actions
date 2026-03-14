@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { buildJobSummaryMarkdown, summarizeSamples } from './summary';
 import { fileExists, parseSamplesFile, sleep, STATE_KEYS } from './shared';
 import { exportWorkflowTrace } from './tracing';
-import type { ActionConfig, RunnerSummary } from './types';
+import type { ActionConfig, RawTelemetryBundle, RunnerSummary, SampleSnapshot, TraceExportResult } from './types';
 
 async function waitForSummary(summaryPath: string, fallbackSamplesPath: string): Promise<void> {
   for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -39,6 +39,45 @@ async function loadSummary(config: ActionConfig): Promise<RunnerSummary | null> 
   return summary;
 }
 
+async function loadSamples(config: ActionConfig): Promise<SampleSnapshot[]> {
+  if (!(await fileExists(config.paths.samples))) {
+    return [];
+  }
+
+  return parseSamplesFile(config.paths.samples);
+}
+
+async function writeRawBundle(
+  config: ActionConfig,
+  summary: RunnerSummary,
+  samples: SampleSnapshot[],
+  traceResult: TraceExportResult | null,
+  daemonError: string,
+): Promise<void> {
+  const bundle: RawTelemetryBundle = {
+    exportedAt: new Date().toISOString(),
+    summaryOnly: config.summaryOnly,
+    config: {
+      serviceName: config.serviceName,
+      metricPrefix: config.metricPrefix,
+      sampleIntervalMs: config.sampleIntervalMs,
+      includeNetwork: config.includeNetwork,
+      includeFilesystem: config.includeFilesystem,
+      includeLoad: config.includeLoad,
+      thresholds: config.thresholds,
+      additionalResourceAttributes: config.additionalResourceAttributes,
+      github: config.github,
+      startedAt: config.startedAt,
+    },
+    summary,
+    samples,
+    trace: traceResult,
+    daemonError: daemonError || undefined,
+  };
+
+  await writeFile(config.paths.rawBundle, JSON.stringify(bundle, null, 2), 'utf8');
+}
+
 async function run(): Promise<void> {
   const core = await import('@actions/core');
   const configPath = core.getState(STATE_KEYS.configPath);
@@ -51,8 +90,9 @@ async function run(): Promise<void> {
   await writeFile(config.paths.stopSignal, new Date().toISOString(), 'utf8');
   await waitForSummary(config.paths.summary, config.paths.samples);
 
+  let daemonError = '';
   if (await fileExists(config.paths.errorLog)) {
-    const daemonError = await readFile(config.paths.errorLog, 'utf8');
+    daemonError = await readFile(config.paths.errorLog, 'utf8');
     core.warning(`Runner telemetry daemon reported an error: ${daemonError}`);
   }
 
@@ -62,10 +102,13 @@ async function run(): Promise<void> {
     return;
   }
 
+  const samples = await loadSamples(config);
+
   let traceSummaryLine = '';
+  let traceResult: TraceExportResult | null = null;
   if (config.enableTraces) {
     try {
-      const traceResult = await exportWorkflowTrace(config, summary);
+      traceResult = await exportWorkflowTrace(config, summary);
       if (traceResult) {
         traceSummaryLine = `**Workflow trace ID:** \`${traceResult.traceId}\` (${traceResult.workflowJobs} enriched jobs)`;
         core.notice(`Exported workflow trace ${traceResult.traceId}.`);
@@ -76,6 +119,9 @@ async function run(): Promise<void> {
       );
     }
   }
+
+  await writeRawBundle(config, summary, samples, traceResult, daemonError);
+  core.notice(`Raw telemetry bundle written to ${config.paths.rawBundle}.`);
 
   if (config.enableJobSummary && process.env.GITHUB_STEP_SUMMARY) {
     const markdown = buildJobSummaryMarkdown(summary);

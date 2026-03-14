@@ -86,11 +86,13 @@ async function run(): Promise<void> {
   core.saveState(STATE_KEYS.configPath, paths.config);
   core.saveState(STATE_KEYS.samplesPath, paths.samples);
   core.saveState(STATE_KEYS.summaryPath, paths.summary);
+  core.saveState(STATE_KEYS.rawBundlePath, paths.rawBundle);
   core.saveState(STATE_KEYS.stopPath, paths.stopSignal);
 
   core.setOutput('telemetry-directory', paths.directory);
   core.setOutput('samples-path', paths.samples);
   core.setOutput('summary-path', paths.summary);
+  core.setOutput('raw-bundle-path', paths.rawBundle);
 
   core.info(
     summaryOnly

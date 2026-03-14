@@ -9,6 +9,7 @@ export const STATE_KEYS = {
   configPath: 'telemetryConfigPath',
   samplesPath: 'telemetrySamplesPath',
   summaryPath: 'telemetrySummaryPath',
+  rawBundlePath: 'telemetryRawBundlePath',
   stopPath: 'telemetryStopPath',
   directory: 'telemetryDirectory',
 } as const;
@@ -25,6 +26,7 @@ export function buildTelemetryPaths(token: string): TelemetryPaths {
     config: path.join(baseDirectory, 'config.json'),
     samples: path.join(baseDirectory, 'samples.jsonl'),
     summary: path.join(baseDirectory, 'summary.json'),
+    rawBundle: path.join(baseDirectory, 'raw-telemetry.json'),
     stopSignal: path.join(baseDirectory, 'stop.signal'),
     errorLog: path.join(baseDirectory, 'daemon-error.log'),
   };

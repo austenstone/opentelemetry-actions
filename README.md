@@ -127,6 +127,31 @@ If you only want the recommendation summary and do **not** want to export to any
 
 That mode still samples CPU, RAM, disk, load, process, and network locally on the runner. It just skips OTLP export and trace export.
 
+The action also writes a raw telemetry bundle at the `raw-bundle-path` output containing:
+
+- sampled runner vitals
+- computed summary
+- non-secret config metadata
+- optional trace metadata
+- daemon error text if sampling had issues
+
+You can upload that bundle as a workflow artifact:
+
+```yaml
+- name: Runner sizing summary only
+  id: telemetry
+  uses: ./
+  with:
+    summary-only: true
+
+- name: Upload raw telemetry bundle
+  if: always()
+  uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+  with:
+    name: raw-runner-telemetry-${{ github.run_id }}
+    path: ${{ steps.telemetry.outputs.raw-bundle-path }}
+```
+
 ### 3. Read the job summary
 
 At the end of the job the action writes a markdown summary with:
@@ -135,6 +160,8 @@ At the end of the job the action writes a markdown summary with:
 - likely bottleneck
 - larger runner recommendation
 - custom image candidate flag
+
+In summary-only mode, the included `test-action.yml` workflow uploads the raw telemetry bundle as an artifact automatically.
 
 ## Included workflows
 

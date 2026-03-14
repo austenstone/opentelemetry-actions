@@ -18,9 +18,6 @@ on:
 jobs:
   demo:
     runs-on: ubuntu-latest
-    env:
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
-      OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
     steps:
       - name: Checkout
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
@@ -37,12 +34,11 @@ jobs:
         run: npm run build:main && npm run build:post && npm run build:daemon
 
       - name: Start runner telemetry
+        id: telemetry
         uses: ./
         with:
-          otlp-endpoint: ${{ env.OTEL_EXPORTER_OTLP_ENDPOINT }}
-          otlp-headers: ${{ env.OTEL_EXPORTER_OTLP_HEADERS }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          summary-only: ${{ env.OTEL_EXPORTER_OTLP_ENDPOINT == '' }}
+          summary-only: true
           additional-resource-attributes: test_run=true,stress_profile=${{ inputs.stress_profile }}
 
       - name: CPU pressure
@@ -67,3 +63,11 @@ jobs:
       - name: Verify summary artifact path
         if: always()
         run: echo "Look for the runner telemetry summary in the job summary panel."
+
+      - name: Upload raw telemetry artifact
+        if: always()
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        with:
+          name: raw-runner-telemetry-${{ github.run_id }}
+          path: ${{ steps.telemetry.outputs.raw-bundle-path }}
+          if-no-files-found: error

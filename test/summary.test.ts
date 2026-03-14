@@ -47,6 +47,7 @@ const baseConfig: ActionConfig = {
     config: '/tmp/otel/config.json',
     samples: '/tmp/otel/samples.jsonl',
     summary: '/tmp/otel/summary.json',
+    rawBundle: '/tmp/otel/raw-telemetry.json',
     stopSignal: '/tmp/otel/stop.signal',
     errorLog: '/tmp/otel/error.log',
   },

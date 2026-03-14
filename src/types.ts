@@ -14,6 +14,7 @@ export interface TelemetryPaths {
   config: string;
   samples: string;
   summary: string;
+  rawBundle: string;
   stopSignal: string;
   errorLog: string;
 }
@@ -142,4 +143,25 @@ export interface WorkflowJobInfo {
 export interface TraceExportResult {
   traceId: string;
   workflowJobs: number;
+}
+
+export interface RawTelemetryBundle {
+  exportedAt: string;
+  summaryOnly: boolean;
+  config: {
+    serviceName: string;
+    metricPrefix: string;
+    sampleIntervalMs: number;
+    includeNetwork: boolean;
+    includeFilesystem: boolean;
+    includeLoad: boolean;
+    thresholds: ThresholdConfig;
+    additionalResourceAttributes: Record<string, string>;
+    github: GitHubContextInfo;
+    startedAt: string;
+  };
+  summary: RunnerSummary;
+  samples: SampleSnapshot[];
+  trace?: TraceExportResult | null;
+  daemonError?: string;
 }

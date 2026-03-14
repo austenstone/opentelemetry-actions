@@ -83,6 +83,8 @@ outputs:
     description: JSONL file containing sampled runner vitals
   summary-path:
     description: JSON file containing the final recommendation summary
+  raw-bundle-path:
+    description: JSON file containing the raw telemetry bundle with config, samples, summary, and optional trace metadata
 runs:
   using: node20
   main: dist/main/index.js
