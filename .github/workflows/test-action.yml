@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
+      OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -39,8 +41,10 @@ jobs:
         id: telemetry
         uses: ./
         with:
+          otlp-endpoint: ${{ env.OTEL_EXPORTER_OTLP_ENDPOINT }}
+          otlp-headers: ${{ env.OTEL_EXPORTER_OTLP_HEADERS }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          summary-only: true
+          summary-only: ${{ env.OTEL_EXPORTER_OTLP_ENDPOINT == '' }}
           additional-resource-attributes: test_run=true,stress_profile=${{ inputs.stress_profile }}
 
       - name: CPU pressure

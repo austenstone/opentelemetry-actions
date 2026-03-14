@@ -218,10 +218,29 @@ The `observability/` directory gives you:
 - OpenTelemetry Collector on `4318`
 - Prometheus on `9090`
 - Grafana on `3000`
+- optional ngrok tunnel with a public OTLP HTTP endpoint
 
-Important reality check: **GitHub-hosted runners cannot reach your laptop’s localhost**. For real GitHub-hosted runner demos, use a public collector or Grafana Cloud. The local stack is for development, screenshots, and rehearsing the dashboard story.
+Important reality check: **GitHub-hosted runners cannot reach your laptop’s localhost**. This repo now includes a Dockerized ngrok tunnel so you can expose the local collector temporarily and point GitHub-hosted runners at it.
 
-### Run it
+### Fastest path
+
+1. Put your ngrok token in `.env`:
+
+```bash
+NGROK_AUTHTOKEN=your-ngrok-token
+```
+
+2. Start the full local stack and tunnel:
+
+```bash
+./scripts/start-local-grafana-stack.sh
+```
+
+3. Run the `Test runner telemetry action` workflow.
+
+The helper script starts Docker, creates an ngrok tunnel to the local collector, and updates the repo secret `OTEL_EXPORTER_OTLP_ENDPOINT` to the public tunnel URL ending in `/v1/metrics`.
+
+### Manual run
 
 ```bash
 docker compose -f observability/docker-compose.yml up -d
@@ -231,6 +250,24 @@ Grafana login:
 
 - user: `admin`
 - password: `admin`
+
+ngrok inspection UI:
+
+- `http://127.0.0.1:4040` by default
+
+If those default ports are already in use, the helper script auto-selects free host ports and prints the actual URLs.
+
+If you want the public tunnel too, use:
+
+```bash
+docker compose -f observability/docker-compose.yml --profile tunnel up -d
+```
+
+### Stop it
+
+```bash
+./scripts/stop-local-grafana-stack.sh
+```
 
 ## Suggested Grafana storyboards
 

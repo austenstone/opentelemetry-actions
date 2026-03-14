@@ -3,8 +3,8 @@ services:
     image: otel/opentelemetry-collector-contrib:0.121.0
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     ports:
-      - "4318:4318"
-      - "8889:8889"
+      - "${OTEL_HTTP_PORT:-4318}:4318"
+      - "${OTEL_PROMETHEUS_EXPORT_PORT:-8889}:8889"
     volumes:
       - ./otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
 
@@ -14,18 +14,32 @@ services:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=15d
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
   grafana:
     image: grafana/grafana:11.5.2
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_DEFAULT_THEME: dark
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  ngrok:
+    profiles: ["tunnel"]
+    image: ngrok/ngrok:3.27.0
+    depends_on:
+      - otel-collector
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    command:
+      - http
+      - http://otel-collector:4318
+      - --log=stdout
+    ports:
+      - "${NGROK_INSPECT_PORT:-4040}:4040"
