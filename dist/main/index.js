@@ -63,6 +63,12 @@ async function run() {
     const token = `${Date.now()}-${(0, node_crypto_1.randomUUID)()}`;
     const paths = (0, shared_1.buildTelemetryPaths)(token);
     await (0, shared_1.ensureDirectory)(paths.directory);
+    const sampleIntervalMs = (0, shared_1.parseNumber)(core.getInput('sample-interval-ms') || process.env.OTEL_RUNNER_TELEMETRY_SAMPLE_INTERVAL_MS, 5000);
+    const requestedExportTimeoutMs = (0, shared_1.parseNumber)(core.getInput('export-timeout-ms'), 10000);
+    const exportTimeoutMs = Math.min(requestedExportTimeoutMs, sampleIntervalMs);
+    if (requestedExportTimeoutMs > sampleIntervalMs) {
+        core.warning(`export-timeout-ms (${requestedExportTimeoutMs}) cannot exceed sample-interval-ms (${sampleIntervalMs}). Clamping export timeout to ${exportTimeoutMs}ms.`);
+    }
     const config = {
         endpoint: endpointInput ? (0, shared_1.normalizeMetricsEndpoint)(endpointInput) : '',
         traceEndpoint: endpointInput
@@ -75,8 +81,8 @@ async function run() {
             process.env.OTEL_RUNNER_TELEMETRY_SERVICE_NAME ||
             'github-runner-telemetry',
         metricPrefix: (0, shared_1.normalizeMetricPrefix)(core.getInput('metric-prefix') || 'github.runner'),
-        sampleIntervalMs: (0, shared_1.parseNumber)(core.getInput('sample-interval-ms') || process.env.OTEL_RUNNER_TELEMETRY_SAMPLE_INTERVAL_MS, 5000),
-        exportTimeoutMs: (0, shared_1.parseNumber)(core.getInput('export-timeout-ms'), 10000),
+        sampleIntervalMs,
+        exportTimeoutMs,
         includeNetwork: (0, shared_1.parseBoolean)(core.getInput('include-network'), true),
         includeFilesystem: (0, shared_1.parseBoolean)(core.getInput('include-filesystem'), true),
         includeLoad: (0, shared_1.parseBoolean)(core.getInput('include-load'), true),
