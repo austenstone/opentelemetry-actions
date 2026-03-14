@@ -1,4 +1,3 @@
-import * as github from '@actions/github';
 import { ROOT_CONTEXT, SpanKind, trace } from '@opentelemetry/api';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
@@ -48,6 +47,7 @@ async function listWorkflowJobs(config: ActionConfig): Promise<WorkflowJobInfo[]
     return [];
   }
 
+  const github = await import('@actions/github');
   const octokit = github.getOctokit(config.githubToken);
   const { owner, repo } = splitRepository(config.github.repository);
   const runId = Number(config.github.runId);
@@ -74,8 +74,8 @@ async function listWorkflowJobs(config: ActionConfig): Promise<WorkflowJobInfo[]
         name: job.name,
         status: job.status ?? 'unknown',
         conclusion: job.conclusion ?? 'unknown',
-        startedAt: job.started_at,
-        completedAt: job.completed_at,
+        startedAt: job.started_at ?? null,
+        completedAt: job.completed_at ?? null,
         runnerName: job.runner_name ?? '',
         labels: job.labels ?? [],
         steps: (job.steps ?? []).map<WorkflowJobStepInfo>((step) => ({
@@ -83,8 +83,8 @@ async function listWorkflowJobs(config: ActionConfig): Promise<WorkflowJobInfo[]
           name: step.name,
           status: step.status ?? 'unknown',
           conclusion: step.conclusion ?? 'unknown',
-          startedAt: step.started_at,
-          completedAt: step.completed_at,
+          startedAt: step.started_at ?? null,
+          completedAt: step.completed_at ?? null,
         })),
       })),
     );

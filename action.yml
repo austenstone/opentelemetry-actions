@@ -8,8 +8,14 @@ inputs:
   otlp-endpoint:
     description: Full OTLP HTTP metrics endpoint, for example https://your-collector.example.com/v1/metrics
     required: false
+  otlp-traces-endpoint:
+    description: Optional OTLP HTTP traces endpoint. Defaults to the metrics endpoint with /v1/traces.
+    required: false
   otlp-headers:
     description: Comma, newline, or semicolon separated HTTP headers in key=value format
+    required: false
+  github-token:
+    description: GitHub token used to enrich traces with workflow job and step metadata
     required: false
   service-name:
     description: OpenTelemetry service.name resource attribute
@@ -41,6 +47,14 @@ inputs:
     default: "true"
   enable-job-summary:
     description: Append a markdown recommendation summary to the workflow job summary
+    required: false
+    default: "true"
+  enable-traces:
+    description: Export workflow and job trace spans to the OTLP traces endpoint
+    required: false
+    default: "true"
+  enable-github-api-enrichment:
+    description: Use the GitHub API to enrich workflow traces with job and step spans
     required: false
     default: "true"
   recommendation-cpu-threshold:

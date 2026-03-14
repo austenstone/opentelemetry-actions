@@ -1,0 +1,69 @@
+name: Test runner telemetry action
+
+on:
+  workflow_dispatch:
+    inputs:
+      stress_profile:
+        description: Which kind of pressure to simulate on the runner
+        required: true
+        default: cpu
+        type: choice
+        options:
+          - cpu
+          - disk
+          - memory
+          - balanced
+          - none
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    env:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
+      OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+
+      - name: Set up Node
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build action bundles
+        run: npm run build:main && npm run build:post && npm run build:daemon
+
+      - name: Start runner telemetry
+        if: env.OTEL_EXPORTER_OTLP_ENDPOINT != ''
+        uses: ./
+        with:
+          otlp-endpoint: ${{ env.OTEL_EXPORTER_OTLP_ENDPOINT }}
+          otlp-headers: ${{ env.OTEL_EXPORTER_OTLP_HEADERS }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          additional-resource-attributes: test_run=true,stress_profile=${{ inputs.stress_profile }}
+
+      - name: CPU pressure
+        if: inputs.stress_profile == 'cpu' || inputs.stress_profile == 'balanced'
+        run: node -e "const end=Date.now()+45000; let x=0; while (Date.now()<end) { for (let i=0;i<5_000_000;i++) x+=Math.sqrt(i); } console.log(x);"
+
+      - name: Disk pressure
+        if: inputs.stress_profile == 'disk' || inputs.stress_profile == 'balanced'
+        run: |
+          dd if=/dev/zero of=runner-telemetry-test.bin bs=8M count=128 status=progress
+          shasum runner-telemetry-test.bin
+          rm -f runner-telemetry-test.bin
+
+      - name: Memory pressure
+        if: inputs.stress_profile == 'memory' || inputs.stress_profile == 'balanced'
+        run: node -e "const blocks=[]; for (let i=0;i<40;i++) { blocks.push(Buffer.alloc(16*1024*1024, i)); } console.log(blocks.length); setTimeout(()=>console.log('memory test done'), 30000);"
+
+      - name: Baseline idle wait
+        if: inputs.stress_profile == 'none'
+        run: sleep 30
+
+      - name: Verify summary artifact path
+        if: always()
+        run: echo "Look for the runner telemetry summary in the job summary panel."

@@ -5,7 +5,9 @@ import type { ActionConfig, SampleSnapshot } from '../src/types';
 
 const baseConfig: ActionConfig = {
   endpoint: 'https://collector.example.com/v1/metrics',
+  traceEndpoint: 'https://collector.example.com/v1/traces',
   headers: {},
+  githubToken: '',
   serviceName: 'github-runner-telemetry',
   metricPrefix: 'github.runner',
   sampleIntervalMs: 5000,
@@ -14,6 +16,8 @@ const baseConfig: ActionConfig = {
   includeFilesystem: true,
   includeLoad: true,
   enableJobSummary: true,
+  enableTraces: true,
+  enableGitHubApiEnrichment: true,
   thresholds: {
     cpuPct: 85,
     memoryPct: 80,
