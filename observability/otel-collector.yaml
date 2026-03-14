@@ -5,11 +5,27 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
+  transform/fleet_labels:
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(attributes["repository"], resource.attributes["github.repository"])
+          - set(attributes["workflow"], resource.attributes["github.workflow"])
+          - set(attributes["job_name"], resource.attributes["github.job"])
+          - set(attributes["runner_os"], resource.attributes["github.runner_os"])
+          - set(attributes["runner_arch"], resource.attributes["github.runner_arch"])
+          - set(attributes["ref_name"], resource.attributes["github.ref_name"])
+          - set(attributes["team"], resource.attributes["team"])
+          - set(attributes["environment"], resource.attributes["environment"])
+          - set(attributes["runner_class"], resource.attributes["runner_class"])
+          - set(attributes["repo_type"], resource.attributes["repo_type"])
+          - set(attributes["benchmark"], resource.attributes["benchmark"])
   batch: {}
 
 exporters:
   prometheus:
     endpoint: 0.0.0.0:8889
+    translation_strategy: UnderscoreEscapingWithoutSuffixes
   debug:
     verbosity: basic
 
@@ -20,5 +36,5 @@ service:
   pipelines:
     metrics:
       receivers: [otlp]
-      processors: [batch]
+      processors: [transform/fleet_labels, batch]
       exporters: [prometheus, debug]

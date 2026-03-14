@@ -1,0 +1,824 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 250
+              },
+              {
+                "color": "red",
+                "value": 750
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "count(github_runner_cpu_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"})",
+          "refId": "A"
+        }
+      ],
+      "title": "Active runner streams",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "quantile(0.95, github_runner_cpu_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"})",
+          "refId": "A"
+        }
+      ],
+      "title": "Fleet CPU p95",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "quantile(0.95, github_runner_memory_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"})",
+          "refId": "A"
+        }
+      ],
+      "title": "Fleet memory p95",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "quantile(0.95, github_runner_disk_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"})",
+          "refId": "A"
+        }
+      ],
+      "title": "Fleet disk p95",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "quantile(0.5, github_runner_cpu_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"})",
+          "legendFormat": "CPU p50",
+          "refId": "A"
+        },
+        {
+          "expr": "quantile(0.95, github_runner_cpu_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"})",
+          "legendFormat": "CPU p95",
+          "refId": "B"
+        },
+        {
+          "expr": "max(github_runner_cpu_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"})",
+          "legendFormat": "CPU max",
+          "refId": "C"
+        }
+      ],
+      "title": "Fleet CPU saturation",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "quantile(0.5, github_runner_memory_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"})",
+          "legendFormat": "Memory p50",
+          "refId": "A"
+        },
+        {
+          "expr": "quantile(0.95, github_runner_memory_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"})",
+          "legendFormat": "Memory p95",
+          "refId": "B"
+        },
+        {
+          "expr": "max(github_runner_memory_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"})",
+          "legendFormat": "Memory max",
+          "refId": "C"
+        }
+      ],
+      "title": "Fleet memory saturation",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "id": 7,
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "tooltip": {
+          "mode": "single"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 100
+      },
+      "targets": [
+        {
+          "expr": "topk(15, avg by (repository) (github_runner_cpu_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"}))",
+          "legendFormat": "{{repository}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Top repositories by average CPU",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "id": 8,
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "tooltip": {
+          "mode": "single"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 100
+      },
+      "targets": [
+        {
+          "expr": "topk(15, max by (workflow) (github_runner_memory_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"}))",
+          "legendFormat": "{{workflow}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Top workflows by max memory",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (repository) (github_runner_filesystem_throughput_bytes_per_sec{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"})",
+          "legendFormat": "FS {{repository}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Filesystem throughput by repository",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(github_runner_network_rx_bytes_per_sec{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"})",
+          "legendFormat": "Fleet RX",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(github_runner_network_tx_bytes_per_sec{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"})",
+          "legendFormat": "Fleet TX",
+          "refId": "B"
+        }
+      ],
+      "title": "Fleet network throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "id": 11,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Value"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "topk(20, github_runner_cpu_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\", job_name=~\"$job_name\", runner_os=~\"$runner_os\", runner_arch=~\"$runner_arch\", ref_name=~\"$ref_name\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Hottest current job streams",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            },
+            "indexByName": {
+              "Value": 6,
+              "job_name": 2,
+              "ref_name": 5,
+              "repository": 0,
+              "runner_arch": 4,
+              "runner_os": 3,
+              "workflow": 1
+            },
+            "renameByName": {
+              "Value": "CPU %",
+              "job_name": "Job",
+              "ref_name": "Ref",
+              "repository": "Repository",
+              "runner_arch": "Arch",
+              "runner_os": "OS",
+              "workflow": "Workflow"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 40,
+  "style": "dark",
+  "tags": [
+    "github-actions",
+    "otel",
+    "runners",
+    "fleet"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": ".*"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(github_runner_cpu_utilization_pct, repository)",
+        "includeAll": true,
+        "multi": true,
+        "name": "repository",
+        "options": [],
+        "query": {
+          "query": "label_values(github_runner_cpu_utilization_pct, repository)",
+          "refId": "Prometheus-repository"
+        },
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": ".*"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(github_runner_cpu_utilization_pct{repository=~\"$repository\"}, workflow)",
+        "includeAll": true,
+        "multi": true,
+        "name": "workflow",
+        "options": [],
+        "query": {
+          "query": "label_values(github_runner_cpu_utilization_pct{repository=~\"$repository\"}, workflow)",
+          "refId": "Prometheus-workflow"
+        },
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": ".*"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(github_runner_cpu_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\"}, job_name)",
+        "includeAll": true,
+        "multi": true,
+        "name": "job_name",
+        "options": [],
+        "query": {
+          "query": "label_values(github_runner_cpu_utilization_pct{repository=~\"$repository\", workflow=~\"$workflow\"}, job_name)",
+          "refId": "Prometheus-job_name"
+        },
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": ".*"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(github_runner_cpu_utilization_pct, runner_os)",
+        "includeAll": true,
+        "multi": true,
+        "name": "runner_os",
+        "options": [],
+        "query": {
+          "query": "label_values(github_runner_cpu_utilization_pct, runner_os)",
+          "refId": "Prometheus-runner_os"
+        },
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": ".*"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(github_runner_cpu_utilization_pct, runner_arch)",
+        "includeAll": true,
+        "multi": true,
+        "name": "runner_arch",
+        "options": [],
+        "query": {
+          "query": "label_values(github_runner_cpu_utilization_pct, runner_arch)",
+          "refId": "Prometheus-runner_arch"
+        },
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": ".*"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(github_runner_cpu_utilization_pct, ref_name)",
+        "includeAll": true,
+        "multi": true,
+        "name": "ref_name",
+        "options": [],
+        "query": {
+          "query": "label_values(github_runner_cpu_utilization_pct, ref_name)",
+          "refId": "Prometheus-ref_name"
+        },
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "GitHub Runner Fleet Telemetry",
+  "uid": "github-runner-fleet-telemetry",
+  "version": 1,
+  "weekStart": ""
+}
