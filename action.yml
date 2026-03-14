@@ -1,0 +1,71 @@
+name: Runner Telemetry to OpenTelemetry
+description: Stream GitHub-hosted runner vitals to an OpenTelemetry endpoint and summarize whether a larger runner or custom image would help.
+author: Austen Stone
+branding:
+  icon: activity
+  color: purple
+inputs:
+  otlp-endpoint:
+    description: Full OTLP HTTP metrics endpoint, for example https://your-collector.example.com/v1/metrics
+    required: false
+  otlp-headers:
+    description: Comma, newline, or semicolon separated HTTP headers in key=value format
+    required: false
+  service-name:
+    description: OpenTelemetry service.name resource attribute
+    required: false
+    default: github-runner-telemetry
+  metric-prefix:
+    description: Prefix used for emitted metric names
+    required: false
+    default: github.runner
+  sample-interval-ms:
+    description: Sampling interval in milliseconds
+    required: false
+    default: "5000"
+  export-timeout-ms:
+    description: Export timeout in milliseconds
+    required: false
+    default: "10000"
+  include-network:
+    description: Record aggregated network throughput metrics
+    required: false
+    default: "true"
+  include-filesystem:
+    description: Record filesystem utilization and throughput metrics
+    required: false
+    default: "true"
+  include-load:
+    description: Record load average metrics when the operating system supports them
+    required: false
+    default: "true"
+  enable-job-summary:
+    description: Append a markdown recommendation summary to the workflow job summary
+    required: false
+    default: "true"
+  recommendation-cpu-threshold:
+    description: CPU p95 threshold that should trigger a larger runner recommendation
+    required: false
+    default: "85"
+  recommendation-memory-threshold:
+    description: Memory max threshold that should trigger a larger runner recommendation
+    required: false
+    default: "80"
+  recommendation-disk-threshold:
+    description: Disk max threshold that should trigger a larger runner recommendation
+    required: false
+    default: "85"
+  additional-resource-attributes:
+    description: Extra resource attributes in key=value format separated by commas, semicolons, or newlines
+    required: false
+outputs:
+  telemetry-directory:
+    description: Directory used for transient sample and summary files
+  samples-path:
+    description: JSONL file containing sampled runner vitals
+  summary-path:
+    description: JSON file containing the final recommendation summary
+runs:
+  using: node20
+  main: dist/main/index.js
+  post: dist/post/index.js

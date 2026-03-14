@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: GitHub Runner Telemetry
+    folder: GitHub Actions
+    type: file
+    updateIntervalSeconds: 15
+    options:
+      path: /var/lib/grafana/dashboards

@@ -1,0 +1,33 @@
+name: Build custom larger-runner image
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'
+
+jobs:
+  snapshot:
+    runs-on: your-image-generation-runner
+    snapshot:
+      image-name: otel-runner-base
+      version: 1.*
+    steps:
+      - name: Install benchmarking and observability tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq fio stress-ng sysstat unzip
+
+      - name: Prime common toolchain caches
+        run: |
+          node --version || true
+          npm --version || true
+          python3 --version || true
+          java -version || true
+
+      - name: Explain why this image exists
+        run: |
+          cat <<'EOF'
+          This image pre-installs benchmarking utilities and common build tooling.
+          The goal is to reduce setup time so you can separate “runner too small”
+          from “we keep reinstalling the world on every job.”
+          EOF

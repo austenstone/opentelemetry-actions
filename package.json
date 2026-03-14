@@ -1,0 +1,53 @@
+{
+  "name": "opentelemetry-actions",
+  "version": "1.0.0",
+  "description": "GitHub Action that streams GitHub-hosted runner vitals to an OpenTelemetry endpoint and recommends when to use larger runners or custom images.",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit",
+    "build:main": "ncc build src/main.ts -o dist/main",
+    "build:post": "ncc build src/post.ts -o dist/post",
+    "build:daemon": "ncc build src/daemon.ts -o dist/daemon",
+    "build": "npm run clean && npm run typecheck && npm run build:main && npm run build:post && npm run build:daemon",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "github-actions",
+    "opentelemetry",
+    "grafana",
+    "observability",
+    "runners",
+    "metrics"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "files": [
+    "action.yml",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@actions/core": "^3.0.0",
+    "@actions/github": "^9.0.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.213.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.213.0",
+    "@opentelemetry/resources": "^2.6.0",
+    "@opentelemetry/sdk-metrics": "^2.6.0",
+    "@opentelemetry/sdk-trace-base": "^2.6.0",
+    "systeminformation": "^5.31.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@vercel/ncc": "^0.38.4",
+    "rimraf": "^6.1.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
+  }
+}

@@ -1,0 +1,64 @@
+name: Compare runner sizes
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_runner_label:
+        description: Label of the larger runner you want to compare against ubuntu-latest
+        required: true
+        type: string
+
+jobs:
+  baseline:
+    name: Baseline on ubuntu-latest
+    runs-on: ubuntu-latest
+    env:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
+      OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+
+      - name: Stream runner telemetry
+        if: env.OTEL_EXPORTER_OTLP_ENDPOINT != ''
+        uses: ./
+        with:
+          otlp-endpoint: ${{ env.OTEL_EXPORTER_OTLP_ENDPOINT }}
+          otlp-headers: ${{ env.OTEL_EXPORTER_OTLP_HEADERS }}
+          additional-resource-attributes: benchmark=baseline,runner_tier=standard
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  candidate:
+    name: Candidate on ${{ inputs.candidate_runner_label }}
+    runs-on: ${{ inputs.candidate_runner_label }}
+    env:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
+      OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+
+      - name: Stream runner telemetry
+        if: env.OTEL_EXPORTER_OTLP_ENDPOINT != ''
+        uses: ./
+        with:
+          otlp-endpoint: ${{ env.OTEL_EXPORTER_OTLP_ENDPOINT }}
+          otlp-headers: ${{ env.OTEL_EXPORTER_OTLP_HEADERS }}
+          additional-resource-attributes: benchmark=candidate,runner_tier=larger
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
