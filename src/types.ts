@@ -41,6 +41,7 @@ export interface ActionConfig {
   traceEndpoint: string;
   headers: Record<string, string>;
   githubToken: string;
+  summaryOnly: boolean;
   serviceName: string;
   metricPrefix: string;
   sampleIntervalMs: number;

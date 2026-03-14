@@ -6,7 +6,7 @@ import { resourceFromAttributes } from '@opentelemetry/resources';
 import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 
 import { collectSystemSnapshot } from './sampler';
-import { buildSampleAttributes } from './shared';
+import { buildResourceAttributes, buildSampleAttributes } from './shared';
 import { summarizeSamples } from './summary';
 import type { ActionConfig, SampleSnapshot } from './types';
 
@@ -17,42 +17,32 @@ async function run(): Promise<void> {
   }
 
   const config = JSON.parse(await readFile(configPath, 'utf8')) as ActionConfig;
-  const attributes = {
-    'service.name': config.serviceName,
-    'github.repository': config.github.repository,
-    'github.workflow': config.github.workflow,
-    'github.job': config.github.job,
-    'github.run_id': config.github.runId,
-    'github.run_attempt': config.github.runAttempt,
-    'github.ref': config.github.ref,
-    'github.sha': config.github.sha,
-    'github.runner_name': config.github.runnerName,
-    'github.runner_os': config.github.runnerOs,
-    'github.runner_arch': config.github.runnerArch,
-    ...config.additionalResourceAttributes,
-  };
+  const resourceAttributes = buildResourceAttributes(
+    config.serviceName,
+    config.github,
+    config.additionalResourceAttributes,
+  );
+  const meterProvider = config.summaryOnly
+    ? null
+    : new MeterProvider({
+        resource: resourceFromAttributes(resourceAttributes),
+        readers: [
+          new PeriodicExportingMetricReader({
+            exporter: new OTLPMetricExporter({
+              url: config.endpoint,
+              headers: config.headers,
+            }),
+            exportIntervalMillis: config.sampleIntervalMs,
+            exportTimeoutMillis: config.exportTimeoutMs,
+          }),
+        ],
+      });
 
-  const exporter = new OTLPMetricExporter({
-    url: config.endpoint,
-    headers: config.headers,
-  });
-
-  const meterProvider = new MeterProvider({
-    resource: resourceFromAttributes(attributes),
-    readers: [
-      new PeriodicExportingMetricReader({
-        exporter,
-        exportIntervalMillis: config.sampleIntervalMs,
-        exportTimeoutMillis: config.exportTimeoutMs,
-      }),
-    ],
-  });
-
-  const meter = meterProvider.getMeter(config.serviceName);
+  const meter = meterProvider?.getMeter(config.serviceName);
   const sampleAttributes = buildSampleAttributes(config.github);
   const prefix = config.metricPrefix;
 
-  const gauges = {
+  const gauges = meter ? {
     cpuUtilization: meter.createGauge(`${prefix}.cpu.utilization_pct`, {
       description: 'Current CPU utilization percent on the GitHub-hosted runner.',
     }),
@@ -125,7 +115,7 @@ async function run(): Promise<void> {
     processesSleeping: meter.createGauge(`${prefix}.processes.sleeping`, {
       description: 'Sleeping processes currently visible on the runner.',
     }),
-  };
+  } : null;
 
   const samples: SampleSnapshot[] = [];
   let stopping = false;
@@ -152,35 +142,37 @@ async function run(): Promise<void> {
       disk_mount: snapshot.diskMount,
     };
 
-    gauges.cpuUtilization.record(snapshot.cpuUtilizationPct, sampleAttributes);
-    gauges.cpuUser.record(snapshot.cpuUserPct, sampleAttributes);
-    gauges.cpuSystem.record(snapshot.cpuSystemPct, sampleAttributes);
-    gauges.cpuLogicalCores.record(snapshot.cpuLogicalCores, sampleAttributes);
-    gauges.memoryUtilization.record(snapshot.memoryUtilizationPct, sampleAttributes);
-    gauges.memoryUsedBytes.record(snapshot.memoryUsedBytes, sampleAttributes);
-    gauges.memoryAvailableBytes.record(snapshot.memoryAvailableBytes, sampleAttributes);
-    gauges.memoryTotalBytes.record(snapshot.memoryTotalBytes, sampleAttributes);
-    gauges.swapUtilization.record(snapshot.swapUtilizationPct, sampleAttributes);
-    gauges.diskUtilization.record(snapshot.diskUtilizationPct, diskAttributes);
-    gauges.diskUsedBytes.record(snapshot.diskUsedBytes, diskAttributes);
-    gauges.diskAvailableBytes.record(snapshot.diskAvailableBytes, diskAttributes);
-    gauges.diskTotalBytes.record(snapshot.diskTotalBytes, diskAttributes);
-    gauges.filesystemThroughput.record(snapshot.filesystemThroughputBytesPerSec, diskAttributes);
-    gauges.diskReadOps.record(snapshot.diskReadOpsPerSec, diskAttributes);
-    gauges.diskWriteOps.record(snapshot.diskWriteOpsPerSec, diskAttributes);
-    gauges.processesRunning.record(snapshot.processesRunning, sampleAttributes);
-    gauges.processesBlocked.record(snapshot.processesBlocked, sampleAttributes);
-    gauges.processesSleeping.record(snapshot.processesSleeping, sampleAttributes);
+    if (gauges) {
+      gauges.cpuUtilization.record(snapshot.cpuUtilizationPct, sampleAttributes);
+      gauges.cpuUser.record(snapshot.cpuUserPct, sampleAttributes);
+      gauges.cpuSystem.record(snapshot.cpuSystemPct, sampleAttributes);
+      gauges.cpuLogicalCores.record(snapshot.cpuLogicalCores, sampleAttributes);
+      gauges.memoryUtilization.record(snapshot.memoryUtilizationPct, sampleAttributes);
+      gauges.memoryUsedBytes.record(snapshot.memoryUsedBytes, sampleAttributes);
+      gauges.memoryAvailableBytes.record(snapshot.memoryAvailableBytes, sampleAttributes);
+      gauges.memoryTotalBytes.record(snapshot.memoryTotalBytes, sampleAttributes);
+      gauges.swapUtilization.record(snapshot.swapUtilizationPct, sampleAttributes);
+      gauges.diskUtilization.record(snapshot.diskUtilizationPct, diskAttributes);
+      gauges.diskUsedBytes.record(snapshot.diskUsedBytes, diskAttributes);
+      gauges.diskAvailableBytes.record(snapshot.diskAvailableBytes, diskAttributes);
+      gauges.diskTotalBytes.record(snapshot.diskTotalBytes, diskAttributes);
+      gauges.filesystemThroughput.record(snapshot.filesystemThroughputBytesPerSec, diskAttributes);
+      gauges.diskReadOps.record(snapshot.diskReadOpsPerSec, diskAttributes);
+      gauges.diskWriteOps.record(snapshot.diskWriteOpsPerSec, diskAttributes);
+      gauges.processesRunning.record(snapshot.processesRunning, sampleAttributes);
+      gauges.processesBlocked.record(snapshot.processesBlocked, sampleAttributes);
+      gauges.processesSleeping.record(snapshot.processesSleeping, sampleAttributes);
 
-    if (config.includeNetwork) {
-      gauges.networkRx.record(snapshot.networkRxBytesPerSec, sampleAttributes);
-      gauges.networkTx.record(snapshot.networkTxBytesPerSec, sampleAttributes);
-    }
+      if (config.includeNetwork) {
+        gauges.networkRx.record(snapshot.networkRxBytesPerSec, sampleAttributes);
+        gauges.networkTx.record(snapshot.networkTxBytesPerSec, sampleAttributes);
+      }
 
-    if (config.includeLoad) {
-      gauges.load1m.record(snapshot.load1m, sampleAttributes);
-      gauges.load5m.record(snapshot.load5m, sampleAttributes);
-      gauges.load15m.record(snapshot.load15m, sampleAttributes);
+      if (config.includeLoad) {
+        gauges.load1m.record(snapshot.load1m, sampleAttributes);
+        gauges.load5m.record(snapshot.load5m, sampleAttributes);
+        gauges.load15m.record(snapshot.load15m, sampleAttributes);
+      }
     }
   };
 
@@ -215,8 +207,10 @@ async function run(): Promise<void> {
     }
 
     await persistSummary();
-    await meterProvider.forceFlush();
-    await meterProvider.shutdown();
+    if (meterProvider) {
+      await meterProvider.forceFlush();
+      await meterProvider.shutdown();
+    }
     process.exit(0);
   };
 

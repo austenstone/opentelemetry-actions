@@ -8,6 +8,7 @@ const baseConfig: ActionConfig = {
   traceEndpoint: 'https://collector.example.com/v1/traces',
   headers: {},
   githubToken: '',
+  summaryOnly: false,
   serviceName: 'github-runner-telemetry',
   metricPrefix: 'github.runner',
   sampleIntervalMs: 5000,

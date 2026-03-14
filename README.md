@@ -5,6 +5,7 @@ This repo gives you an opinionated GitHub Actions story for **GitHub-hosted runn
 - stream runner vitals to any **OTLP HTTP metrics endpoint**
 - capture **CPU, RAM, disk, load, process, and network** telemetry during a job
 - emit a **job summary verdict** on whether you need a larger runner
+- support a **summary-only mode** when you want no backend at all
 - flag when **custom images** are probably the better optimization than brute-force bigger iron
 - ship with a **local OTel Collector + Prometheus + Grafana** stack for demos
 
@@ -113,6 +114,19 @@ Examples:
 
 Drop it in **early** in the job so the monitored window covers the real work.
 
+### 2b. Use summary-only mode
+
+If you only want the recommendation summary and do **not** want to export to any OTLP backend:
+
+```yaml
+- name: Runner sizing summary only
+  uses: ./
+  with:
+    summary-only: true
+```
+
+That mode still samples CPU, RAM, disk, load, process, and network locally on the runner. It just skips OTLP export and trace export.
+
 ### 3. Read the job summary
 
 At the end of the job the action writes a markdown summary with:
@@ -126,7 +140,7 @@ At the end of the job the action writes a markdown summary with:
 
 ### `.github/workflows/ci.yml`
 
-Dogfoods the action on this repo’s own CI. If OTLP secrets exist, it streams metrics. If not, CI still runs.
+Dogfoods the action on this repo’s own CI. If OTLP secrets exist, it streams metrics. If not, you can still use summary-only mode.
 
 ### `.github/workflows/compare-runner-sizes.yml`
 

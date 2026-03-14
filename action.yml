@@ -17,6 +17,10 @@ inputs:
   github-token:
     description: GitHub token used to enrich traces with workflow job and step metadata
     required: false
+  summary-only:
+    description: Sample locally and write only the job summary without requiring any OTLP endpoint
+    required: false
+    default: "false"
   service-name:
     description: OpenTelemetry service.name resource attribute
     required: false

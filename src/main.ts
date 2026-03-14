@@ -8,10 +8,11 @@ import type { ActionConfig } from './types';
 
 async function run(): Promise<void> {
   const core = await import('@actions/core');
+  const summaryOnly = parseBoolean(core.getInput('summary-only'), false);
   const endpointInput = core.getInput('otlp-endpoint') || process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-  if (!endpointInput) {
+  if (!endpointInput && !summaryOnly) {
     throw new Error(
-      'Missing OTLP endpoint. Set the action input `otlp-endpoint` or the environment variable `OTEL_EXPORTER_OTLP_ENDPOINT`.',
+      'Missing OTLP endpoint. Set the action input `otlp-endpoint` or the environment variable `OTEL_EXPORTER_OTLP_ENDPOINT`, or enable `summary-only` mode.',
     );
   }
 
@@ -30,13 +31,16 @@ async function run(): Promise<void> {
   await ensureDirectory(paths.directory);
 
   const config: ActionConfig = {
-    endpoint: normalizeMetricsEndpoint(endpointInput),
-    traceEndpoint: normalizeTracesEndpoint(
-      endpointInput,
-      core.getInput('otlp-traces-endpoint') || process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
-    ),
+    endpoint: endpointInput ? normalizeMetricsEndpoint(endpointInput) : '',
+    traceEndpoint: endpointInput
+      ? normalizeTracesEndpoint(
+          endpointInput,
+          core.getInput('otlp-traces-endpoint') || process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+        )
+      : '',
     headers: parseKeyValuePairs(headersInput),
     githubToken,
+    summaryOnly,
     serviceName:
       core.getInput('service-name') ||
       process.env.OTEL_RUNNER_TELEMETRY_SERVICE_NAME ||
@@ -51,7 +55,7 @@ async function run(): Promise<void> {
     includeFilesystem: parseBoolean(core.getInput('include-filesystem'), true),
     includeLoad: parseBoolean(core.getInput('include-load'), true),
     enableJobSummary: parseBoolean(core.getInput('enable-job-summary'), true),
-    enableTraces: parseBoolean(core.getInput('enable-traces'), true),
+    enableTraces: summaryOnly ? false : parseBoolean(core.getInput('enable-traces'), true),
     enableGitHubApiEnrichment: parseBoolean(core.getInput('enable-github-api-enrichment'), true),
     thresholds: {
       cpuPct: parseNumber(core.getInput('recommendation-cpu-threshold'), 85),
@@ -89,7 +93,9 @@ async function run(): Promise<void> {
   core.setOutput('summary-path', paths.summary);
 
   core.info(
-    `Streaming runner telemetry to ${config.endpoint} every ${config.sampleIntervalMs}ms from ${config.github.runnerName}. Traces ${config.enableTraces ? `enabled via ${config.traceEndpoint}` : 'disabled'}.`,
+    summaryOnly
+      ? `Sampling runner telemetry locally every ${config.sampleIntervalMs}ms from ${config.github.runnerName} and writing only the job summary.`
+      : `Streaming runner telemetry to ${config.endpoint} every ${config.sampleIntervalMs}ms from ${config.github.runnerName}. Traces ${config.enableTraces ? `enabled via ${config.traceEndpoint}` : 'disabled'}.`,
   );
 }
 
