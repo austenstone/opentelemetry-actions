@@ -1,5 +1,5 @@
-name: Runner Telemetry to OpenTelemetry
-description: Stream GitHub-hosted runner vitals to an OpenTelemetry endpoint and summarize whether a larger runner or custom image would help.
+name: GitHub Actions Telemetry to OpenTelemetry
+description: Capture GitHub Actions runner telemetry and export it to an OpenTelemetry endpoint, with optional summaries and custom-image support.
 author: Austen Stone
 branding:
   icon: activity

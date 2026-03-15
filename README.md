@@ -1,27 +1,57 @@
-# OpenTelemetry GitHub Actions Runner Telemetry
+# OpenTelemetry for GitHub Actions
 
-This repo gives you an opinionated GitHub Actions story for **GitHub-hosted runners**, **larger runners**, and **custom images**:
+This repository is an **OpenTelemetry solution for GitHub Actions**.
 
-- stream runner vitals to any **OTLP HTTP metrics endpoint**
-- capture **CPU, RAM, disk, load, process, and network** telemetry during a job
-- emit a **job summary verdict** on whether you need a larger runner
-- support a **summary-only mode** when you want no backend at all
-- flag when **custom images** are probably the better optimization than brute-force bigger iron
-- ship with a **local OTel Collector + Prometheus + Grafana** stack for demos
+It gives you two ways to collect telemetry from GitHub Actions jobs:
 
-If you want the short answer on tooling:
+1. a **GitHub Action** that samples runner vitals during a job and exports them to an OTLP endpoint
+2. a **custom-image mode** for GitHub-hosted larger runners that starts an OpenTelemetry Collector automatically for every job
 
-- **Best default:** **Grafana Cloud**
-- **Best local demo stack:** **Grafana + Prometheus + OpenTelemetry Collector** in `observability/`
-- **Best if you mostly care about traces and debugging app behavior:** **Honeycomb**
+The core goal is simple:
 
-For **runner performance storytelling and rightsizing**, Grafana is the best fit. It is cheap to explain, OTel-native enough, great at time series, and customers already know what the charts mean. Honeycomb is awesome, but it is the wrong hero if the story is “this job is CPU-bound and your 4-core runner is crying.”
+- capture runner-level telemetry from GitHub Actions jobs
+- attach useful workflow metadata
+- export the data to any OpenTelemetry-compatible backend
+- provide a local Collector + Prometheus + Grafana stack for testing and demos
 
-## What this action emits
+Anything related to summaries or runner recommendations is optional and secondary. The primary job of this repo is to get GitHub Actions telemetry into OpenTelemetry cleanly.
+
+## What this repo does
+
+### Action mode
+
+The action can:
+
+- sample CPU, memory, disk, load, process, and network telemetry during a job
+- export metrics to an **OTLP HTTP** endpoint
+- optionally export workflow/job traces
+- optionally write a markdown job summary
+- optionally upload a raw telemetry bundle in `summary-only` mode
+
+### Custom-image mode
+
+For GitHub-hosted larger runners, this repo also includes a custom-image workflow that bakes in:
+
+- `otelcol-contrib`
+- pre-job and post-job hooks
+- a runtime config renderer
+
+That mode turns the runner image itself into an OpenTelemetry-enabled environment for GitHub Actions jobs.
+
+### Local observability stack
+
+The `observability/` directory includes a local stack with:
+
+- OpenTelemetry Collector
+- Prometheus
+- Grafana
+- optional ngrok tunnel for public OTLP ingestion during demos
+
+## Telemetry emitted by the action
 
 Metric prefix defaults to `github.runner`.
 
-### Core vitals
+### Core metrics
 
 - `github.runner.cpu.utilization_pct`
 - `github.runner.cpu.user_pct`
@@ -48,9 +78,9 @@ Metric prefix defaults to `github.runner`.
 - `github.runner.processes.blocked`
 - `github.runner.processes.sleeping`
 
-### Useful resource attributes
+### Resource attributes
 
-Every metric is tagged with job context you can filter on in Grafana:
+Metrics can include workflow context such as:
 
 - `repository`
 - `workflow`
@@ -64,56 +94,34 @@ Every metric is tagged with job context you can filter on in Grafana:
 - `runner_os`
 - `runner_arch`
 
-## How the story works
-
-This is the pitch track the data supports:
-
-### Move to a larger runner when
-
-- CPU p95 is consistently above **85%**
-- memory peaks above **80%**
-- disk pressure is regularly ugly
-- load average stays pinned relative to available cores
-
-### Move to a custom image when
-
-- total runtime is still long
-- CPU/memory/disk pressure stay low
-- the job is mostly paying the **“install the world again” tax**
-
-That gives you a clean customer narrative:
-
-> “You do **not** have a compute problem. You have a provisioning/setup problem. A custom base image on larger runners cuts setup waste without blindly paying for bigger hardware.”
-
 ## Quick start
 
 ### Runtime compatibility
 
-This action now runs on **Node.js 24**.
+This action runs on **Node.js 24**.
 
 - JavaScript actions in this repo use the Node 24 runtime
-- bundled workflows pin Node 24-compatible versions of `actions/checkout` and `actions/setup-node`
 - GitHub-hosted runners are already compatible
-- for self-hosted runners, make sure the runner version is at least `v2.327.1`
+- for self-hosted runners, use runner version `v2.327.1` or newer
 
-### 1. Point the action at an OTLP endpoint
+### 1. Set your OTLP secrets or variables
 
-Set these secrets in the repository or organization:
+Set these in your repository or organization:
 
 - `OTEL_EXPORTER_OTLP_ENDPOINT`
 - `OTEL_EXPORTER_OTLP_HEADERS` (optional)
 
-The endpoint should be the **full OTLP HTTP metrics URL**.
+The endpoint should be the full OTLP HTTP metrics URL.
 
 Examples:
 
-- Grafana Cloud: region-specific OTLP gateway URL ending in `/v1/metrics` or vendor-provided OTLP metrics path
-- Public collector: `https://collector.example.com/v1/metrics`
+- `https://collector.example.com/v1/metrics`
+- vendor OTLP HTTP metrics endpoint
 
-### 2. Use the action in a workflow
+### 2. Add the action to a workflow
 
 ```yaml
-- name: Stream runner telemetry
+- name: Export runner telemetry
   uses: ./
   with:
     otlp-endpoint: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
@@ -121,43 +129,14 @@ Examples:
     additional-resource-attributes: team=actions,environment=prod
 ```
 
-Drop it in **early** in the job so the monitored window covers the real work.
+Add it early in the job if you want the monitored window to include setup and build time.
 
-### 2b. Use summary-only mode
+### 3. Optional: summary-only mode
 
-If you only want the recommendation summary and do **not** want to export to any OTLP backend:
-
-```yaml
-- name: Runner sizing summary only
-  uses: ./
-  with:
-    summary-only: true
-```
-
-That mode still samples CPU, RAM, disk, load, process, and network locally on the runner. It just skips OTLP export and trace export.
-
-The action also writes a raw telemetry bundle at the `raw-bundle-path` output containing:
-
-- sampled runner vitals
-- computed summary
-- non-secret config metadata
-- optional trace metadata
-- daemon error text if sampling had issues
-
-In `summary-only` mode, the action uploads that raw bundle as a GitHub Actions artifact automatically from its `post` step.
-
-The artifact name format is:
-
-```text
-raw-runner-telemetry-<run_id>-<run_attempt>-<job>
-```
-
-If you still want the raw file path for custom handling, the `raw-bundle-path` output is available during the job.
-
-Example:
+If you want local telemetry collection and summary generation without OTLP export:
 
 ```yaml
-- name: Runner sizing summary only
+- name: Runner telemetry summary only
   id: telemetry
   uses: ./
   with:
@@ -168,78 +147,44 @@ Example:
   run: echo "Raw bundle path: ${{ steps.telemetry.outputs.raw-bundle-path }}"
 ```
 
-### 3. Read the job summary
+In `summary-only` mode the action:
 
-At the end of the job the action writes a markdown summary with:
+- skips OTLP export
+- still collects local telemetry
+- writes a summary
+- uploads a raw telemetry bundle artifact from the `post` step
 
-- CPU / memory / disk averages, p95s, and peaks
-- likely bottleneck
-- larger runner recommendation
-- custom image candidate flag
+Artifact name format:
 
-In summary-only mode, the included `test-action.yml` workflow relies on the action itself to upload the raw telemetry artifact automatically.
+```text
+raw-runner-telemetry-<run_id>-<run_attempt>-<job>
+```
 
-## Included workflows
+## Custom-image mode for larger runners
 
-### `.github/workflows/ci.yml`
+This repo includes `.github/workflows/build-custom-image.yml` for creating a GitHub-hosted larger-runner custom image.
 
-Dogfoods the action on this repo’s own CI. If OTLP secrets exist, it streams metrics. If not, you can still use summary-only mode.
-
-### `.github/workflows/compare-runner-sizes.yml`
-
-Manual A/B comparison:
-
-- `baseline`: `ubuntu-latest`
-- `candidate`: your larger runner label
-
-Use this to show a before/after story for the same workload.
-
-### `.github/workflows/build-custom-image.yml`
-
-Builds a **custom image** for a larger runner using GitHub’s `snapshot` support.
-
-It preinstalls:
-
-- `jq`
-- `fio`
-- `stress-ng`
-- `sysstat`
-- `unzip`
-- `otelcol-contrib`
-
-That makes it easier to separate:
-
-- **runtime setup waste**
-- **actual CPU / RAM / disk contention**
-
-### Autonomous custom-image telemetry mode
-
-If you use the generated custom image on a larger runner, you can collect runner host metrics
-without calling this action at all.
-
-The image bakes in:
+The image installs:
 
 - `otelcol-contrib`
-- a pre-job hook at `/opt/runner/pre-job.sh`
-- a post-job hook at `/opt/runner/post-job.sh`
-- a runtime config generator at `/opt/runner/render-otel-config.py`
-- helper install scripts from `scripts/custom-image/`
+- `/opt/runner/pre-job.sh`
+- `/opt/runner/post-job.sh`
+- `/opt/runner/render-otel-config.py`
 
-That means every workflow job running on the custom-image runner starts a background collector
-automatically before the first step and stops it after the final step.
+When the image is used on a larger runner, each workflow job automatically:
 
-The baked collector:
+- starts a runner-local OpenTelemetry Collector before the first workflow step
+- scrapes host metrics for the duration of the job
+- exports upstream when OTLP configuration is present
+- stops the collector after the job completes
 
-- scrapes host CPU, memory, filesystem, disk, load, network, and process metrics
-- can export upstream automatically if shared org-level settings are present
+Recommended shared org settings for this mode:
 
-Recommended shared org settings:
+- `RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT`
+- `RUNNER_OTEL_EXPORTER_OTLP_HEADERS` (optional)
+- `RUNNER_OTEL_RESOURCE_ATTRIBUTES` (optional)
 
-- org variable: `RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT`
-- org secret: `RUNNER_OTEL_EXPORTER_OTLP_HEADERS` (optional)
-- org variable: `RUNNER_OTEL_RESOURCE_ATTRIBUTES` (optional comma-delimited key/value pairs)
-
-Optional shared org variables for fleet metadata:
+Optional metadata variables:
 
 - `RUNNER_OTEL_SERVICE_NAME`
 - `RUNNER_OTEL_ENVIRONMENT`
@@ -248,7 +193,7 @@ Optional shared org variables for fleet metadata:
 - `RUNNER_OTEL_REPO_TYPE`
 - `RUNNER_OTEL_BENCHMARK`
 
-Example workflow env when using the custom-image runner:
+Example workflow env:
 
 ```yaml
 env:
@@ -258,23 +203,16 @@ env:
     team=actions,environment=prod,runner_class=larger
 ```
 
-With that setup, the custom image gives you always-on runner hostmetrics for the whole job.
-No explicit `uses: ./` step is required.
-
-Important tradeoff: this autonomous collector mode replaces the action for telemetry shipping,
-but it does **not** reproduce the action-specific markdown summary, raw telemetry artifact, or
-rightsizing recommendation logic. If you want those outputs, keep using the action.
+This custom-image mode is useful when you want OpenTelemetry coverage for the whole job without explicitly adding the action step to every workflow.
 
 ## Local demo stack
 
-The `observability/` directory gives you:
+The `observability/` directory provides:
 
 - OpenTelemetry Collector on `4318`
 - Prometheus on `9090`
 - Grafana on `3000`
-- optional ngrok tunnel with a public OTLP HTTP endpoint
-
-Important reality check: **GitHub-hosted runners cannot reach your laptop’s localhost**. This repo now includes a Dockerized ngrok tunnel so you can expose the local collector temporarily and point GitHub-hosted runners at it.
+- optional ngrok tunnel
 
 ### Fastest path
 
@@ -284,15 +222,13 @@ Important reality check: **GitHub-hosted runners cannot reach your laptop’s lo
 NGROK_AUTHTOKEN=your-ngrok-token
 ```
 
-2. Start the full local stack and tunnel:
+2. Start the local stack:
 
 ```bash
 ./scripts/start-local-grafana-stack.sh
 ```
 
-3. Run the `Test runner telemetry action` workflow.
-
-The helper script starts Docker, creates an ngrok tunnel to the local collector, and updates the repo secret `OTEL_EXPORTER_OTLP_ENDPOINT` to the public tunnel URL ending in `/v1/metrics`.
+3. Run the test workflow.
 
 ### Manual run
 
@@ -305,74 +241,46 @@ Grafana login:
 - user: `admin`
 - password: `admin`
 
-ngrok inspection UI:
-
-- `http://127.0.0.1:4040` by default
-
-If those default ports are already in use, the helper script auto-selects free host ports and prints the actual URLs.
-
-If you want the public tunnel too, use:
+To include the public tunnel:
 
 ```bash
 docker compose -f observability/docker-compose.yml --profile tunnel up -d
 ```
 
-### Stop it
+To stop everything:
 
 ```bash
 ./scripts/stop-local-grafana-stack.sh
 ```
 
-## Suggested Grafana storyboards
+## Included workflows
 
-### “Is this runner too small?”
+### `.github/workflows/ci.yml`
 
-Show these together:
+Dogfoods the action in this repository.
 
-- CPU utilization
-- memory utilization
-- disk utilization
-- load average
-- total workflow duration by runner label
+### `.github/workflows/test-action.yml`
 
-### “Would a custom image help more than a bigger runner?”
+Exercises the action and summary-only behavior.
 
-Show these together:
+### `.github/workflows/compare-runner-sizes.yml`
 
-- low CPU / memory pressure
-- long job durations
-- repeated setup-heavy workflows
-- before/after image rollout
+Compares telemetry across runner types.
 
-### “What changed after moving to larger runners?”
+### `.github/workflows/build-custom-image.yml`
 
-Compare baseline vs candidate on:
+Builds the larger-runner custom image used for autonomous collector mode.
 
-- p95 CPU
-- max memory pressure
-- workflow duration
-- filesystem throughput
+## Action inputs and outputs
 
-## Recommended backend choices
+See `action.yml` for the complete contract.
 
-### Grafana Cloud — my recommendation
+Highlights:
 
-Use this when you want the fewest moving parts and the cleanest demo.
-
-Why it wins here:
-
-- OTLP-friendly ingest
-- great dashboards for infra time series
-- easy to compare runner classes and image versions
-- fastest path to a polished customer-facing story
-
-### Honeycomb — awesome, but not first for this use case
-
-Use Honeycomb if you also want to correlate CI telemetry with application traces or debugging workflows. For pure runner vitals and rightsizing? Grafana is simply the more natural hammer.
-
-### Datadog / New Relic / Chronosphere
-
-All viable if the customer already owns one. I would not introduce a new paid platform just to tell a runner sizing story unless there is already platform gravity there.
+- inputs for OTLP metrics/traces endpoints and headers
+- flags for including network/filesystem/load metrics
+- flags for enabling traces, summaries, and GitHub API enrichment
+- outputs for sample files, summary files, and the raw telemetry bundle
 
 ## Development
 
@@ -388,41 +296,20 @@ npm ci
 npm test
 ```
 
-### Build action bundles
+### Build
 
 ```bash
 npm run build
 ```
 
-## Notes on custom images
+## Scope
 
-GitHub custom images for larger runners are in **public preview** and only work with **GitHub-hosted larger runners**. The basic workflow is:
+This repo is not trying to be a general CI optimization framework or a vendor pitch.
 
-1. create an image-generation runner
-2. run a workflow with `snapshot`
-3. install that custom image on a larger runner
+It is an OpenTelemetry-first way to:
 
-This repo includes a workflow for exactly that.
+- collect telemetry from GitHub Actions jobs
+- export it to OTLP-compatible backends
+- support both action-based and custom-image-based collection models
 
-Security-wise, keep image-generation runners in a **dedicated runner group**. Do not let random dev repos write to the thing that bakes your production runner image. That is how you end up with a very creative incident review.
-
-## Try it on a real larger runner
-
-1. create a larger runner in your org
-2. point `compare-runner-sizes.yml` at that runner label
-3. run it once on standard hosted, once on larger
-4. show the Grafana dashboard + job summary
-5. decide whether the right answer is:
-   - more cores / RAM
-   - faster disk / bigger runner
-   - custom image
-   - all of the above
-
-## What I’d pitch to a customer
-
-- If CPU is pinned: **larger runner**
-- If memory peaks hard: **larger runner**
-- If disk/setup dominates and compute is chill: **custom image first**
-- If you need a boardroom-safe first implementation: **Grafana Cloud + this action + a larger-runner A/B workflow**
-
-That combo tells a very clean story without inventing observability theater.
+That’s the whole thing.

@@ -3,6 +3,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OTELCOL_VERSION="${OTELCOL_VERSION:-0.121.0}"
+TMP_DIR="$(mktemp -d)"
+
+cleanup() {
+  rm -rf "$TMP_DIR"
+}
+
+trap cleanup EXIT
 
 apt-get update
 apt-get install -y curl jq fio python3 stress-ng sysstat tar unzip
@@ -17,13 +24,30 @@ case "$arch" in
     ;;
 esac
 
+release_url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}"
 otel_pkg="otelcol-contrib_${OTELCOL_VERSION}_linux_${otel_arch}.tar.gz"
+checksums_pkg="opentelemetry-collector-releases_otelcol-contrib_checksums.txt"
 curl -fsSL \
-  -o "/tmp/${otel_pkg}" \
-  "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/${otel_pkg}"
+  -o "$TMP_DIR/${otel_pkg}" \
+  "$release_url/${otel_pkg}"
 
-tar -xzf "/tmp/${otel_pkg}" -C /tmp
-install -m 0755 /tmp/otelcol-contrib /usr/local/bin/otelcol-contrib
+curl -fsSL \
+  -o "$TMP_DIR/${checksums_pkg}" \
+  "$release_url/${checksums_pkg}"
+
+checksum_line="$(awk -v pkg="$otel_pkg" '$2 == pkg { print }' "$TMP_DIR/${checksums_pkg}")"
+if [[ -z "$checksum_line" ]]; then
+  echo "Failed to find checksum entry for ${otel_pkg}" >&2
+  exit 1
+fi
+
+if ! printf '%s\n' "$checksum_line" | (cd "$TMP_DIR" && sha256sum -c -); then
+  echo "Checksum verification failed for ${otel_pkg}" >&2
+  exit 1
+fi
+
+tar -xzf "$TMP_DIR/${otel_pkg}" -C "$TMP_DIR"
+install -m 0755 "$TMP_DIR/otelcol-contrib" /usr/local/bin/otelcol-contrib
 
 mkdir -p /opt/runner /etc/otelcol-contrib
 install -m 0755 "$SCRIPT_DIR/render-otel-config.py" /opt/runner/render-otel-config.py

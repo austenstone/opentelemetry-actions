@@ -1,7 +1,7 @@
 {
   "name": "opentelemetry-actions",
   "version": "1.0.0",
-  "description": "GitHub Action that streams GitHub-hosted runner vitals to an OpenTelemetry endpoint and recommends when to use larger runners or custom images.",
+  "description": "GitHub Action and custom-image tooling for capturing GitHub Actions telemetry and exporting it to OpenTelemetry.",
   "main": "dist/main/index.js",
   "scripts": {
     "clean": "rimraf dist",
