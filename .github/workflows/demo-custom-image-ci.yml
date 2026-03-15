@@ -1,0 +1,50 @@
+name: Demo CI on custom base image
+
+on:
+  workflow_dispatch:
+
+jobs:
+  demo:
+    runs-on: austen-otel
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
+      RUNNER_OTEL_RESOURCE_ATTRIBUTES: environment=demo,repo_type=action,runner_label=austen-otel,collection_mode=custom_image
+      RUNNER_OTEL_SERVICE_NAME: github-actions-custom-image-demo
+      RUNNER_OTEL_ENVIRONMENT: demo
+      RUNNER_OTEL_CLASS: custom-image
+      RUNNER_OTEL_BENCHMARK: austen-otel-demo
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Set up Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
+        with:
+          node-version: 24
+
+      - name: Verify custom image collector tooling
+        run: |
+          otelcol-contrib --version
+          python3 --version
+          test -x /opt/runner/pre-job.sh
+          test -x /opt/runner/post-job.sh
+          test -x /opt/runner/render-otel-config.py
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build action bundles
+        run: npm run build
+
+      - name: Explain telemetry source
+        if: always()
+        run: |
+          cat <<'EOF'
+          This workflow runs on the custom base image runner label austen-otel.
+          Runner telemetry should be collected by the baked-in OpenTelemetry Collector
+          hooks rather than by an explicit uses: ./ step in this workflow.
+          EOF
