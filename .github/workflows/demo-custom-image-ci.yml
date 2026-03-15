@@ -54,6 +54,15 @@ jobs:
         with:
           node-version: 24
 
+      - name: Start action telemetry stream
+        id: telemetry
+        uses: ./
+        with:
+          otlp-endpoint: ${{ env.RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT }}
+          summary-only: ${{ env.RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT == '' }}
+          enable-traces: false
+          additional-resource-attributes: environment=demo,repo_type=action,runner_label=austen-otel,collection_mode=action_step,demo_suite=custom_image_ci,scenario=${{ matrix.scenario }},benchmark=${{ matrix.benchmark }}
+
       - name: Verify custom image collector tooling
         run: |
           otelcol-contrib --version
@@ -131,5 +140,6 @@ jobs:
           cat <<'EOF'
           This workflow runs a multi-job telemetry suite on the custom base image runner label austen-otel.
           Each matrix job emits a different pressure profile so dashboards can split by scenario,
-          benchmark, and runner label without needing an explicit uses: ./ step.
+          benchmark, and runner label. The runner image still exercises the baked-in collector hooks,
+          while this workflow also emits github_runner_* metrics through the action for Grafana dashboards.
           EOF
