@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OTELCOL_VERSION="${OTELCOL_VERSION:-0.121.0}"
 
 apt-get update
-apt-get install -y curl jq fio stress-ng sysstat tar unzip
+apt-get install -y curl jq fio python3 stress-ng sysstat tar unzip
 
 arch="$(dpkg --print-architecture)"
 case "$arch" in

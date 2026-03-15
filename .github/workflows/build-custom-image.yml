@@ -22,11 +22,6 @@ jobs:
           sudo OTELCOL_VERSION="$OTELCOL_VERSION" bash ./scripts/custom-image/install-otel.sh
           sudo chmod +x /opt/runner/pre-job.sh /opt/runner/post-job.sh
 
-          sudo tee -a /etc/environment >/dev/null <<'EOF'
-          ACTIONS_RUNNER_HOOK_JOB_STARTED=/opt/runner/pre-job.sh
-          ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/opt/runner/post-job.sh
-          EOF
-
       - name: Prime common toolchain caches
         run: |
           node --version || true
