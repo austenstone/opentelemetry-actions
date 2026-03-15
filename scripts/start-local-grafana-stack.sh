@@ -146,6 +146,7 @@ else
     fi
 
     nohup ngrok http "http://127.0.0.1:${OTEL_HTTP_PORT}" \
+      --web-addr="127.0.0.1:${NGROK_INSPECT_PORT}" \
       --log=stdout \
       --log-format=json \
       > "$RUNTIME_DIR/ngrok.log" 2>&1 &

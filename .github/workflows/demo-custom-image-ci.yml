@@ -2,18 +2,49 @@ name: Demo CI on custom base image
 
 on:
   workflow_dispatch:
+    inputs:
+      duration_seconds:
+        description: Duration for stress steps in seconds
+        required: true
+        default: '45'
+        type: string
 
 jobs:
-  demo:
+  telemetry-suite:
+    name: ${{ matrix.name }}
     runs-on: austen-otel
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - name: baseline validation
+            scenario: baseline
+            benchmark: baseline
+          - name: cpu saturation
+            scenario: cpu
+            benchmark: cpu
+          - name: memory pressure
+            scenario: memory
+            benchmark: memory
+          - name: disk throughput
+            scenario: disk
+            benchmark: disk
+          - name: balanced stress
+            scenario: balanced
+            benchmark: balanced
+          - name: setup heavy churn
+            scenario: setup-heavy
+            benchmark: setup-heavy
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
-      RUNNER_OTEL_RESOURCE_ATTRIBUTES: environment=demo,repo_type=action,runner_label=austen-otel,collection_mode=custom_image
+      RUNNER_OTEL_RESOURCE_ATTRIBUTES: environment=demo,repo_type=action,runner_label=austen-otel,collection_mode=custom_image,demo_suite=custom_image_ci,scenario=${{ matrix.scenario }}
       RUNNER_OTEL_SERVICE_NAME: github-actions-custom-image-demo
       RUNNER_OTEL_ENVIRONMENT: demo
       RUNNER_OTEL_CLASS: custom-image
-      RUNNER_OTEL_BENCHMARK: austen-otel-demo
+      RUNNER_OTEL_BENCHMARK: austen-otel-${{ matrix.benchmark }}
+      STRESS_DURATION_SECONDS: ${{ inputs.duration_seconds }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -27,6 +58,8 @@ jobs:
         run: |
           otelcol-contrib --version
           python3 --version
+          stress-ng --version
+          fio --version
           test -x /opt/runner/pre-job.sh
           test -x /opt/runner/post-job.sh
           test -x /opt/runner/render-otel-config.py
@@ -40,11 +73,63 @@ jobs:
       - name: Build action bundles
         run: npm run build
 
+      - name: Scenario marker
+        run: |
+          cat <<EOF
+          scenario=${{ matrix.scenario }}
+          benchmark=${{ matrix.benchmark }}
+          stress_duration=${STRESS_DURATION_SECONDS}s
+          EOF
+
+      - name: CPU saturation workload
+        if: matrix.scenario == 'cpu' || matrix.scenario == 'balanced'
+        run: |
+          stress-ng --cpu 4 --cpu-method matrixprod --timeout "${STRESS_DURATION_SECONDS}s" --metrics-brief
+
+      - name: Memory pressure workload
+        if: matrix.scenario == 'memory' || matrix.scenario == 'balanced'
+        run: |
+          stress-ng --vm 2 --vm-bytes 70% --vm-keep --timeout "${STRESS_DURATION_SECONDS}s" --metrics-brief
+
+      - name: Disk throughput workload
+        if: matrix.scenario == 'disk' || matrix.scenario == 'balanced'
+        run: |
+          fio \
+            --name=runner-telemetry-disk \
+            --filename="${RUNNER_TEMP}/runner-telemetry-disk.bin" \
+            --size=512M \
+            --bs=1M \
+            --rw=randrw \
+            --rwmixread=35 \
+            --iodepth=16 \
+            --ioengine=libaio \
+            --direct=1 \
+            --runtime="${STRESS_DURATION_SECONDS}" \
+            --time_based \
+            --group_reporting
+          rm -f "${RUNNER_TEMP}/runner-telemetry-disk.bin"
+
+      - name: Setup heavy churn workload
+        if: matrix.scenario == 'setup-heavy'
+        run: |
+          rm -rf node_modules dist
+          npm ci
+          npm run build
+          tar -czf "${RUNNER_TEMP}/workspace-cache.tar.gz" node_modules dist package-lock.json
+          rm -rf node_modules dist
+          tar -xzf "${RUNNER_TEMP}/workspace-cache.tar.gz"
+          npm test
+          rm -f "${RUNNER_TEMP}/workspace-cache.tar.gz"
+
+      - name: Baseline idle settle
+        if: matrix.scenario == 'baseline'
+        run: sleep "${STRESS_DURATION_SECONDS}"
+
       - name: Explain telemetry source
         if: always()
         run: |
           cat <<'EOF'
-          This workflow runs on the custom base image runner label austen-otel.
-          Runner telemetry should be collected by the baked-in OpenTelemetry Collector
-          hooks rather than by an explicit uses: ./ step in this workflow.
+          This workflow runs a multi-job telemetry suite on the custom base image runner label austen-otel.
+          Each matrix job emits a different pressure profile so dashboards can split by scenario,
+          benchmark, and runner label without needing an explicit uses: ./ step.
           EOF
