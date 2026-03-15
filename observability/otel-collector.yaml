@@ -5,6 +5,10 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 256
+    spike_limit_mib: 64
   transform/fleet_labels:
     metric_statements:
       - context: datapoint
@@ -20,7 +24,9 @@ processors:
           - set(attributes["runner_class"], resource.attributes["runner_class"])
           - set(attributes["repo_type"], resource.attributes["repo_type"])
           - set(attributes["benchmark"], resource.attributes["benchmark"])
-  batch: {}
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
 
 exporters:
   prometheus:
@@ -32,8 +38,10 @@ service:
   telemetry:
     logs:
       level: info
+    metrics:
+      level: basic
   pipelines:
     metrics:
       receivers: [otlp]
-      processors: [transform/fleet_labels, batch]
+      processors: [memory_limiter, transform/fleet_labels, batch]
       exporters: [prometheus, debug]

@@ -6,6 +6,13 @@ from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
 
+def env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 def parse_key_values(raw: str) -> dict[str, str]:
     result: dict[str, str] = {}
     if not raw:
@@ -38,6 +45,17 @@ def normalize_metrics_endpoint(endpoint: str) -> str:
 
 
 output_path = Path(sys.argv[1])
+collection_interval = os.getenv('RUNNER_OTEL_COLLECTION_INTERVAL', '30s')
+memory_limit_mib = int(os.getenv('RUNNER_OTEL_MEMORY_LIMIT_MIB', '128'))
+memory_spike_limit_mib = int(os.getenv('RUNNER_OTEL_MEMORY_SPIKE_LIMIT_MIB', '32'))
+batch_timeout = os.getenv('RUNNER_OTEL_BATCH_TIMEOUT', '10s')
+batch_send_size = int(os.getenv('RUNNER_OTEL_BATCH_SEND_SIZE', '512'))
+export_timeout = os.getenv('RUNNER_OTEL_EXPORTER_TIMEOUT', '10s')
+export_queue_size = int(os.getenv('RUNNER_OTEL_EXPORTER_QUEUE_SIZE', '256'))
+retry_initial_interval = os.getenv('RUNNER_OTEL_EXPORTER_RETRY_INITIAL_INTERVAL', '5s')
+retry_max_interval = os.getenv('RUNNER_OTEL_EXPORTER_RETRY_MAX_INTERVAL', '30s')
+retry_max_elapsed_time = os.getenv('RUNNER_OTEL_EXPORTER_RETRY_MAX_ELAPSED_TIME', '5m')
+debug_exporter_enabled = env_flag('RUNNER_OTEL_DEBUG_EXPORTER', default=False)
 endpoint = normalize_metrics_endpoint(
     os.getenv('RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT')
     or os.getenv('OTEL_EXPORTER_OTLP_ENDPOINT')
@@ -85,7 +103,7 @@ resource_attributes = {key: value for key, value in resource_attributes.items() 
 lines = [
     'receivers:',
     '  hostmetrics:',
-    '    collection_interval: 30s',
+    f'    collection_interval: {collection_interval}',
     '    scrapers:',
     '      cpu:',
     '      memory:',
@@ -96,11 +114,15 @@ lines = [
     '      processes:',
     '',
     'processors:',
+    '  memory_limiter:',
+    '    check_interval: 5s',
+    f'    limit_mib: {memory_limit_mib}',
+    f'    spike_limit_mib: {memory_spike_limit_mib}',
 ]
 
-processor_names = ['batch']
+processor_names = ['memory_limiter', 'batch']
 if resource_attributes:
-    processor_names.insert(0, 'resource/job_context')
+    processor_names.insert(1, 'resource/job_context')
     lines.extend(['  resource/job_context:', '    attributes:'])
     for key, value in resource_attributes.items():
         lines.extend(
@@ -111,12 +133,39 @@ if resource_attributes:
             ]
         )
 
-lines.extend(['  batch: {}', '', 'exporters:', '  debug:', '    verbosity: basic'])
+lines.extend(
+    [
+        '  batch:',
+        f'    timeout: {batch_timeout}',
+        f'    send_batch_size: {batch_send_size}',
+        '',
+        'exporters:',
+    ]
+)
 
-exporter_names = ['debug']
+exporter_names: list[str] = []
+if debug_exporter_enabled or not endpoint:
+    exporter_names.append('debug')
+    lines.extend(['  debug:', '    verbosity: basic'])
+
 if endpoint:
     exporter_names.append('otlphttp/upstream')
-    lines.extend(['  otlphttp/upstream:', f'    endpoint: {json.dumps(endpoint)}'])
+    lines.extend(
+        [
+            '  otlphttp/upstream:',
+            f'    endpoint: {json.dumps(endpoint)}',
+            f'    timeout: {export_timeout}',
+            '    compression: gzip',
+            '    sending_queue:',
+            '      enabled: true',
+            f'      queue_size: {export_queue_size}',
+            '    retry_on_failure:',
+            '      enabled: true',
+            f'      initial_interval: {retry_initial_interval}',
+            f'      max_interval: {retry_max_interval}',
+            f'      max_elapsed_time: {retry_max_elapsed_time}',
+        ]
+    )
     if headers:
         lines.append('    headers:')
         for key, value in headers.items():
