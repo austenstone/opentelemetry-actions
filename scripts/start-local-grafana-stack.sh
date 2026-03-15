@@ -7,6 +7,36 @@ COMPOSE_FILE="$ROOT_DIR/observability/docker-compose.yml"
 RUNTIME_DIR="$ROOT_DIR/.otel-runner-telemetry"
 NGROK_PID_FILE="$RUNTIME_DIR/ngrok.pid"
 
+detect_github_repo() {
+  local remote_name="${1:-origin}"
+  local remote_url
+
+  remote_url="$(git remote get-url "$remote_name" 2>/dev/null || true)"
+  if [[ -z "$remote_url" ]]; then
+    return 1
+  fi
+
+  python3 - "$remote_url" <<'PY'
+import re
+import sys
+
+remote = sys.argv[1].strip()
+patterns = [
+    r'github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/.]+?)(?:\.git)?$',
+    r'^https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/.]+?)(?:\.git)?$',
+    r'^ssh://git@github\.com/(?P<owner>[^/]+)/(?P<repo>[^/.]+?)(?:\.git)?$',
+]
+
+for pattern in patterns:
+    match = re.search(pattern, remote)
+    if match:
+        print(f"{match.group('owner')}/{match.group('repo')}")
+        raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
 cd "$ROOT_DIR"
 mkdir -p "$RUNTIME_DIR"
 
@@ -195,6 +225,11 @@ fi
 
 otlp_endpoint="${public_url%/}/v1/metrics"
 
+target_repo="${OTEL_GITHUB_REPOSITORY:-${GH_REPO:-}}"
+if [[ -z "$target_repo" ]]; then
+  target_repo="$(detect_github_repo origin || true)"
+fi
+
 echo
 echo "ngrok collector URL: $public_url"
 echo "OTLP metrics endpoint: $otlp_endpoint"
@@ -205,10 +240,16 @@ fi
 
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   echo
-  echo "Updating GitHub secrets for this repo..."
-  gh secret set OTEL_EXPORTER_OTLP_ENDPOINT --body "$otlp_endpoint"
-  gh secret delete OTEL_EXPORTER_OTLP_HEADERS >/dev/null 2>&1 || true
-  echo "Set OTEL_EXPORTER_OTLP_ENDPOINT and cleared OTEL_EXPORTER_OTLP_HEADERS for local collector mode."
+  if [[ -n "$target_repo" ]]; then
+    echo "Updating GitHub secrets for ${target_repo}..."
+    gh secret set OTEL_EXPORTER_OTLP_ENDPOINT -R "$target_repo" --body "$otlp_endpoint"
+    gh secret delete OTEL_EXPORTER_OTLP_HEADERS -R "$target_repo" >/dev/null 2>&1 || true
+    echo "Set OTEL_EXPORTER_OTLP_ENDPOINT and cleared OTEL_EXPORTER_OTLP_HEADERS for local collector mode."
+  else
+    echo "GitHub repository could not be inferred from git remotes."
+    echo "Set OTEL_GITHUB_REPOSITORY=owner/repo (or GH_REPO=owner/repo) and re-run this script, or set this secret manually:"
+    echo "OTEL_EXPORTER_OTLP_ENDPOINT=$otlp_endpoint"
+  fi
 else
   echo
   echo "GitHub CLI is not authenticated. Set this repo secret manually:"

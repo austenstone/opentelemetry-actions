@@ -228,6 +228,14 @@ NGROK_AUTHTOKEN=your-ngrok-token
 ./scripts/start-local-grafana-stack.sh
 ```
 
+If you have multiple git remotes or want to target a repo other than `origin`, set one of these before running the helper:
+
+```bash
+export OTEL_GITHUB_REPOSITORY=octodemo/opentelemetry-actions
+# or
+export GH_REPO=octodemo/opentelemetry-actions
+```
+
 3. Run the test workflow.
 
 ### Manual run
