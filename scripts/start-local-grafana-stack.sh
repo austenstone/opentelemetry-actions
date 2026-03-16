@@ -238,6 +238,9 @@ echo "ngrok inspection UI: http://127.0.0.1:${NGROK_INSPECT_PORT}"
 if [[ -f "$RUNTIME_DIR/ngrok.log" ]]; then
   echo "ngrok log: $RUNTIME_DIR/ngrok.log"
 fi
+echo
+echo "For custom-image demo workflows, pass this workflow_dispatch input:"
+echo "  otlp_endpoint=$otlp_endpoint"
 
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   echo

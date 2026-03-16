@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+from datetime import datetime, timezone
 import os
 import sys
 from pathlib import Path
@@ -31,6 +32,23 @@ def parse_key_values(raw: str) -> dict[str, str]:
     return result
 
 
+def parse_duration_millis(raw: str | None, default: int) -> int:
+    if not raw:
+        return default
+
+    value = raw.strip().lower()
+    try:
+        if value.endswith('ms'):
+            return int(float(value[:-2]))
+        if value.endswith('s'):
+            return int(float(value[:-1]) * 1000)
+        if value.endswith('m'):
+            return int(float(value[:-1]) * 60_000)
+        return int(float(value))
+    except ValueError:
+        return default
+
+
 def normalize_metrics_endpoint(endpoint: str) -> str:
     if not endpoint:
         return endpoint
@@ -44,145 +62,118 @@ def normalize_metrics_endpoint(endpoint: str) -> str:
     return endpoint
 
 
+def normalize_traces_endpoint(endpoint: str, explicit_trace_endpoint: str) -> str:
+    if explicit_trace_endpoint:
+        return normalize_metrics_endpoint(explicit_trace_endpoint).replace('/v1/metrics', '/v1/traces')
+
+    if not endpoint:
+        return ''
+
+    parsed = urlparse(endpoint)
+    path = parsed.path or ''
+    if path in ('', '/'):
+        parsed = parsed._replace(path='/v1/traces')
+        return urlunparse(parsed)
+
+    if path.endswith('/v1/metrics'):
+        parsed = parsed._replace(path=path[:-len('/v1/metrics')] + '/v1/traces')
+        return urlunparse(parsed)
+
+    return endpoint
+
+
+def load_event_inputs() -> dict[str, str]:
+    event_path = os.getenv('GITHUB_EVENT_PATH')
+    if not event_path:
+        return {}
+
+    try:
+        payload = json.loads(Path(event_path).read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    inputs = payload.get('inputs')
+    if not isinstance(inputs, dict):
+        return {}
+
+    normalized: dict[str, str] = {}
+    for key, value in inputs.items():
+        if isinstance(value, str):
+            normalized[key] = value
+
+    return normalized
+
+
 output_path = Path(sys.argv[1])
-collection_interval = os.getenv('RUNNER_OTEL_COLLECTION_INTERVAL', '30s')
-memory_limit_mib = int(os.getenv('RUNNER_OTEL_MEMORY_LIMIT_MIB', '128'))
-memory_spike_limit_mib = int(os.getenv('RUNNER_OTEL_MEMORY_SPIKE_LIMIT_MIB', '32'))
-batch_timeout = os.getenv('RUNNER_OTEL_BATCH_TIMEOUT', '10s')
-batch_send_size = int(os.getenv('RUNNER_OTEL_BATCH_SEND_SIZE', '512'))
-export_timeout = os.getenv('RUNNER_OTEL_EXPORTER_TIMEOUT', '10s')
-export_queue_size = int(os.getenv('RUNNER_OTEL_EXPORTER_QUEUE_SIZE', '256'))
-retry_initial_interval = os.getenv('RUNNER_OTEL_EXPORTER_RETRY_INITIAL_INTERVAL', '5s')
-retry_max_interval = os.getenv('RUNNER_OTEL_EXPORTER_RETRY_MAX_INTERVAL', '30s')
-retry_max_elapsed_time = os.getenv('RUNNER_OTEL_EXPORTER_RETRY_MAX_ELAPSED_TIME', '5m')
-debug_exporter_enabled = env_flag('RUNNER_OTEL_DEBUG_EXPORTER', default=False)
+inputs = load_event_inputs()
+runtime_dir = output_path.parent
 endpoint = normalize_metrics_endpoint(
-    os.getenv('RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT')
+    inputs.get('otlp_endpoint', '')
+    or os.getenv('RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT')
     or os.getenv('OTEL_EXPORTER_OTLP_ENDPOINT')
-    or ''
 )
 headers = parse_key_values(
-    os.getenv('RUNNER_OTEL_EXPORTER_OTLP_HEADERS')
+    inputs.get('otlp_headers', '')
+    or os.getenv('RUNNER_OTEL_EXPORTER_OTLP_HEADERS')
     or os.getenv('OTEL_EXPORTER_OTLP_HEADERS')
-    or ''
 )
-extra_attributes = parse_key_values(os.getenv('RUNNER_OTEL_RESOURCE_ATTRIBUTES') or '')
+additional_attributes = parse_key_values(os.getenv('RUNNER_OTEL_RESOURCE_ATTRIBUTES') or '')
 
-resource_attributes = {
-    'service.name': os.getenv('RUNNER_OTEL_SERVICE_NAME', 'github-runner-hostmetrics'),
-    'github.repository': os.getenv('GITHUB_REPOSITORY', ''),
-    'github.workflow': os.getenv('GITHUB_WORKFLOW', ''),
-    'github.job': os.getenv('GITHUB_JOB', ''),
-    'github.run_id': os.getenv('GITHUB_RUN_ID', ''),
-    'github.run_attempt': os.getenv('GITHUB_RUN_ATTEMPT', ''),
-    'github.ref': os.getenv('GITHUB_REF', ''),
-    'github.ref_name': os.getenv('GITHUB_REF_NAME', ''),
-    'github.sha': os.getenv('GITHUB_SHA', ''),
-    'github.actor': os.getenv('GITHUB_ACTOR', ''),
-    'github.triggering_actor': os.getenv('GITHUB_TRIGGERING_ACTOR', ''),
-    'github.runner_name': os.getenv('RUNNER_NAME', ''),
-    'github.runner_os': os.getenv('RUNNER_OS', ''),
-    'github.runner_arch': os.getenv('RUNNER_ARCH', ''),
+job_name = os.getenv('GITHUB_JOB', 'unknown')
+benchmark = os.getenv('RUNNER_OTEL_BENCHMARK', '') or job_name.replace('_', '-')
+
+if 'benchmark' not in additional_attributes and benchmark:
+    additional_attributes['benchmark'] = benchmark
+
+config = {
+    'endpoint': endpoint,
+    'traceEndpoint': normalize_traces_endpoint(endpoint, inputs.get('otlp_traces_endpoint', '')),
+    'headers': headers,
+    'githubToken': '',
+    'summaryOnly': not endpoint,
+    'serviceName': os.getenv('RUNNER_OTEL_SERVICE_NAME', 'github-runner-telemetry'),
+    'metricPrefix': 'github.runner',
+    'sampleIntervalMs': parse_duration_millis(os.getenv('RUNNER_OTEL_COLLECTION_INTERVAL'), 5000),
+    'exportTimeoutMs': parse_duration_millis(os.getenv('RUNNER_OTEL_EXPORTER_TIMEOUT'), 5000),
+    'includeNetwork': env_flag('RUNNER_OTEL_INCLUDE_NETWORK', True),
+    'includeFilesystem': env_flag('RUNNER_OTEL_INCLUDE_FILESYSTEM', True),
+    'includeLoad': env_flag('RUNNER_OTEL_INCLUDE_LOAD', True),
+    'enableJobSummary': False,
+    'enableTraces': False,
+    'enableGitHubApiEnrichment': False,
+    'thresholds': {
+        'cpuPct': 85,
+        'memoryPct': 80,
+        'diskPct': 85,
+    },
+    'additionalResourceAttributes': additional_attributes,
+    'github': {
+        'repository': os.getenv('GITHUB_REPOSITORY', 'unknown'),
+        'workflow': os.getenv('GITHUB_WORKFLOW', 'unknown'),
+        'workflowRef': os.getenv('GITHUB_WORKFLOW_REF', 'unknown'),
+        'workflowSha': os.getenv('GITHUB_WORKFLOW_SHA', 'unknown'),
+        'job': job_name,
+        'runId': os.getenv('GITHUB_RUN_ID', 'unknown'),
+        'runAttempt': os.getenv('GITHUB_RUN_ATTEMPT', '1'),
+        'actor': os.getenv('GITHUB_ACTOR', 'unknown'),
+        'triggeringActor': os.getenv('GITHUB_TRIGGERING_ACTOR', os.getenv('GITHUB_ACTOR', 'unknown')),
+        'ref': os.getenv('GITHUB_REF', 'unknown'),
+        'refName': os.getenv('GITHUB_REF_NAME', 'unknown'),
+        'sha': os.getenv('GITHUB_SHA', 'unknown'),
+        'runnerName': os.getenv('RUNNER_NAME', 'unknown'),
+        'runnerOs': os.getenv('RUNNER_OS', 'unknown'),
+        'runnerArch': os.getenv('RUNNER_ARCH', 'unknown'),
+    },
+    'paths': {
+        'directory': str(runtime_dir),
+        'config': str(output_path),
+        'samples': str(runtime_dir / 'samples.jsonl'),
+        'summary': str(runtime_dir / 'summary.json'),
+        'rawBundle': str(runtime_dir / 'raw-telemetry.json'),
+        'stopSignal': str(runtime_dir / 'stop.signal'),
+        'errorLog': str(runtime_dir / 'daemon-error.log'),
+    },
+    'startedAt': datetime.now(timezone.utc).isoformat(),
 }
 
-optional_defaults = {
-    'environment': os.getenv('RUNNER_OTEL_ENVIRONMENT', ''),
-    'team': os.getenv('RUNNER_OTEL_TEAM', ''),
-    'runner_class': os.getenv('RUNNER_OTEL_CLASS', ''),
-    'repo_type': os.getenv('RUNNER_OTEL_REPO_TYPE', ''),
-    'benchmark': os.getenv('RUNNER_OTEL_BENCHMARK', ''),
-}
-
-for key, value in optional_defaults.items():
-    if value:
-        resource_attributes[key] = value
-
-resource_attributes.update(extra_attributes)
-resource_attributes = {key: value for key, value in resource_attributes.items() if value}
-
-lines = [
-    'receivers:',
-    '  hostmetrics:',
-    f'    collection_interval: {collection_interval}',
-    '    scrapers:',
-    '      cpu:',
-    '      memory:',
-    '      filesystem:',
-    '      disk:',
-    '      load:',
-    '      network:',
-    '      processes:',
-    '',
-    'processors:',
-    '  memory_limiter:',
-    '    check_interval: 5s',
-    f'    limit_mib: {memory_limit_mib}',
-    f'    spike_limit_mib: {memory_spike_limit_mib}',
-]
-
-processor_names = ['memory_limiter', 'batch']
-if resource_attributes:
-    processor_names.insert(1, 'resource/job_context')
-    lines.extend(['  resource/job_context:', '    attributes:'])
-    for key, value in resource_attributes.items():
-        lines.extend(
-            [
-                f'      - key: {json.dumps(key)}',
-                f'        value: {json.dumps(value)}',
-                '        action: upsert',
-            ]
-        )
-
-lines.extend(
-    [
-        '  batch:',
-        f'    timeout: {batch_timeout}',
-        f'    send_batch_size: {batch_send_size}',
-        '',
-        'exporters:',
-    ]
-)
-
-exporter_names: list[str] = []
-if debug_exporter_enabled or not endpoint:
-    exporter_names.append('debug')
-    lines.extend(['  debug:', '    verbosity: basic'])
-
-if endpoint:
-    exporter_names.append('otlphttp/upstream')
-    lines.extend(
-        [
-            '  otlphttp/upstream:',
-            f'    endpoint: {json.dumps(endpoint)}',
-            f'    timeout: {export_timeout}',
-            '    compression: gzip',
-            '    sending_queue:',
-            '      enabled: true',
-            f'      queue_size: {export_queue_size}',
-            '    retry_on_failure:',
-            '      enabled: true',
-            f'      initial_interval: {retry_initial_interval}',
-            f'      max_interval: {retry_max_interval}',
-            f'      max_elapsed_time: {retry_max_elapsed_time}',
-        ]
-    )
-    if headers:
-        lines.append('    headers:')
-        for key, value in headers.items():
-            lines.append(f'      {json.dumps(key)}: {json.dumps(value)}')
-
-processors_list = ', '.join(processor_names)
-exporters_list = ', '.join(exporter_names)
-lines.extend(
-    [
-        '',
-        'service:',
-        '  pipelines:',
-        '    metrics:',
-        '      receivers: [hostmetrics]',
-        f'      processors: [{processors_list}]',
-        f'      exporters: [{exporters_list}]',
-    ]
-)
-
-output_path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+output_path.write_text(json.dumps(config, indent=2) + '\n', encoding='utf-8')

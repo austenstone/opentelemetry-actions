@@ -8,6 +8,16 @@ on:
         required: true
         default: '45'
         type: string
+      otlp_endpoint:
+        description: OTLP HTTP metrics endpoint for the custom-image hook, for example https://your-collector.example.com/v1/metrics
+        required: false
+        default: ''
+        type: string
+      otlp_headers:
+        description: Optional OTLP headers in key=value format separated by commas or semicolons
+        required: false
+        default: ''
+        type: string
 
 jobs:
   telemetry-suite:
@@ -38,7 +48,6 @@ jobs:
             benchmark: setup-heavy
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
       RUNNER_OTEL_RESOURCE_ATTRIBUTES: environment=demo,repo_type=action,runner_label=austen-otel,collection_mode=custom_image,demo_suite=custom_image_ci,scenario=${{ matrix.scenario }}
       RUNNER_OTEL_SERVICE_NAME: github-actions-custom-image-demo
       RUNNER_OTEL_ENVIRONMENT: demo
@@ -54,24 +63,16 @@ jobs:
         with:
           node-version: 24
 
-      - name: Start action telemetry stream
-        id: telemetry
-        uses: ./
-        with:
-          otlp-endpoint: ${{ env.RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT }}
-          summary-only: ${{ env.RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT == '' }}
-          enable-traces: false
-          additional-resource-attributes: environment=demo,repo_type=action,runner_label=austen-otel,collection_mode=action_step,demo_suite=custom_image_ci,scenario=${{ matrix.scenario }},benchmark=${{ matrix.benchmark }}
-
       - name: Verify custom image collector tooling
         run: |
-          otelcol-contrib --version
           python3 --version
+          node --version
           stress-ng --version
           fio --version
           test -x /opt/runner/pre-job.sh
           test -x /opt/runner/post-job.sh
           test -x /opt/runner/render-otel-config.py
+          test -f /opt/runner/telemetry/daemon/index.js
 
       - name: Install dependencies
         run: npm ci
@@ -140,6 +141,6 @@ jobs:
           cat <<'EOF'
           This workflow runs a multi-job telemetry suite on the custom base image runner label austen-otel.
           Each matrix job emits a different pressure profile so dashboards can split by scenario,
-          benchmark, and runner label. The runner image still exercises the baked-in collector hooks,
-          while this workflow also emits github_runner_* metrics through the action for Grafana dashboards.
+          benchmark, and runner label. The runner image collector reads otlp_endpoint and otlp_headers
+          from workflow_dispatch inputs through GITHUB_EVENT_PATH, so no explicit uses: ./ step is required.
           EOF

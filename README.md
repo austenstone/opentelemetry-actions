@@ -238,6 +238,8 @@ export GH_REPO=octodemo/opentelemetry-actions
 
 3. Run the test workflow.
 
+For custom-image demo workflows that run on `austen-otel`, pass the ngrok URL as a `workflow_dispatch` input named `otlp_endpoint`. The job-start hook can read workflow inputs from `GITHUB_EVENT_PATH`, but it cannot read step-level action inputs.
+
 ### Manual run
 
 ```bash

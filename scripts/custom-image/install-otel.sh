@@ -53,9 +53,12 @@ mkdir -p /opt/runner /etc/otelcol-contrib
 install -m 0755 "$SCRIPT_DIR/render-otel-config.py" /opt/runner/render-otel-config.py
 install -m 0755 "$SCRIPT_DIR/pre-job.sh" /opt/runner/pre-job.sh
 install -m 0755 "$SCRIPT_DIR/post-job.sh" /opt/runner/post-job.sh
+mkdir -p /opt/runner/telemetry/daemon
+cp -R "$SCRIPT_DIR/../../dist/daemon/." /opt/runner/telemetry/daemon/
+find /opt/runner/telemetry -type f -name '*.js' -exec chmod 0755 {} \;
 
 cat > /etc/otelcol-contrib/README.txt <<'EOF'
-This image uses /opt/runner/render-otel-config.py to generate a runtime collector config.
+This image uses /opt/runner/render-otel-config.py to generate a runtime runner telemetry config.
 Supported environment variables:
 - RUNNER_OTEL_EXPORTER_OTLP_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT
 - RUNNER_OTEL_EXPORTER_OTLP_HEADERS or OTEL_EXPORTER_OTLP_HEADERS
@@ -66,6 +69,7 @@ Supported environment variables:
 - RUNNER_OTEL_CLASS
 - RUNNER_OTEL_REPO_TYPE
 - RUNNER_OTEL_BENCHMARK
+- workflow_dispatch input otlp_endpoint (for custom-image demo workflows)
 EOF
 
 if ! grep -q '^ACTIONS_RUNNER_HOOK_JOB_STARTED=/opt/runner/pre-job.sh$' /etc/environment 2>/dev/null; then
