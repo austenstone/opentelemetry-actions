@@ -7,7 +7,7 @@ on:
 
 jobs:
   snapshot:
-    runs-on: austen-image-generator
+    runs-on: image-generator-ubuntu22-arm64-2core
     env:
       OTELCOL_VERSION: 0.121.0
     snapshot:
