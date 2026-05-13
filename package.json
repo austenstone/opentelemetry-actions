@@ -42,7 +42,7 @@
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-metrics": "^2.6.0",
     "@opentelemetry/sdk-trace-base": "^2.6.0",
-    "systeminformation": "^5.31.4"
+    "systeminformation": "^5.31.6"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
