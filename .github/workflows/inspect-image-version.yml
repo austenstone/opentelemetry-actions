@@ -102,6 +102,8 @@ jobs:
 
           export GH_TOKEN="${CUSTOM_IMAGE_READ_TOKEN:-$GITHUB_TOKEN_FALLBACK}"
           owner="${DISPATCH_IMAGE_OWNER:-${WORKFLOW_IMAGE_OWNER:-${GITHUB_REPOSITORY_OWNER}}}"
+          candidate_file="$RUNNER_TEMP/image-candidates.json"
+          resolved_file="$RUNNER_TEMP/resolved-image.json"
 
           python3 <<'PY'
           import json
@@ -122,23 +124,29 @@ jobs:
             'image_definition_id': first_value(os.environ.get('DISPATCH_IMAGE_DEFINITION_ID', ''), ''),
           }
 
-          def record_from_dict(node: dict[str, object]) -> None:
-            lowered = {str(key).lower(): key for key in node.keys()}
-            name_key = next((lowered[key] for key in ('image_name', 'name') if key in lowered), None)
-            version_key = next((lowered[key] for key in ('image_version', 'version') if key in lowered), None)
-            id_key = next((lowered[key] for key in ('image_definition_id', 'id') if key in lowered), None)
-            if not candidates['image_name'] and name_key is not None:
-              value = node.get(name_key)
+          def record_image_dict(node: dict[str, object]) -> None:
+            if not candidates['image_name']:
+              value = node.get('image_name', node.get('name'))
               if isinstance(value, str):
                 candidates['image_name'] = value
-            if not candidates['image_version'] and version_key is not None:
-              value = node.get(version_key)
+            if not candidates['image_version']:
+              value = node.get('image_version', node.get('version'))
               if isinstance(value, str):
                 candidates['image_version'] = value
-            if not candidates['image_definition_id'] and id_key is not None:
-              value = node.get(id_key)
+            if not candidates['image_definition_id']:
+              value = node.get('image_definition_id', node.get('image_id'))
               if isinstance(value, (str, int)):
                 candidates['image_definition_id'] = str(value)
+
+          def record_from_dict(node: dict[str, object]) -> None:
+            if 'image_name' in node or 'image_version' in node or 'image_definition_id' in node or 'image_id' in node:
+              record_image_dict(node)
+            nested_image = node.get('image')
+            if isinstance(nested_image, dict):
+              record_image_dict(nested_image)
+            nested_image_version = node.get('image_version')
+            if isinstance(nested_image_version, dict):
+              record_image_dict(nested_image_version)
 
           def visit(node: object) -> None:
             if isinstance(node, dict):
@@ -153,16 +161,8 @@ jobs:
           if not candidates['image_name']:
             candidates['image_name'] = os.environ['DEFAULT_IMAGE_NAME']
 
-          out_path = Path(os.environ['RUNNER_TEMP']) / 'image-candidates.json'
-          out_path.write_text(json.dumps(candidates, indent=2, sort_keys=True))
-          print(out_path)
+          Path(os.environ['RUNNER_TEMP'], 'image-candidates.json').write_text(json.dumps(candidates, indent=2, sort_keys=True))
           PY
-
-          candidate_file="$(tail -n 1 <<<"$(python3 <<'PY'
-          import os
-          print(os.path.join(os.environ['RUNNER_TEMP'], 'image-candidates.json'))
-          PY
-          )")"
 
           image_name="$(python3 -c "import json; print(json.load(open('$candidate_file'))['image_name'])")"
           image_version="$(python3 -c "import json; print(json.load(open('$candidate_file'))['image_version'])")"
@@ -173,20 +173,14 @@ jobs:
           echo "Resolved candidate image version: ${image_version:-<latest>}"
           echo "Resolved candidate image definition id: ${image_definition_id:-<lookup required>}"
 
-          api_failed='false'
           if ! gh api \
             -H 'Accept: application/vnd.github+json' \
             "/orgs/${owner}/actions/hosted-runners/images/custom" > "$RUNNER_TEMP/custom-images.json"; then
-            api_failed='true'
-            echo "api_failed=true" >> "$GITHUB_OUTPUT"
-            echo "owner=${owner}" >> "$GITHUB_OUTPUT"
-            echo "image_name=${image_name}" >> "$GITHUB_OUTPUT"
-            echo "image_version=${image_version}" >> "$GITHUB_OUTPUT"
-            echo "image_definition_id=${image_definition_id}" >> "$GITHUB_OUTPUT"
             echo "Could not read custom image definitions through the hosted-runners API. The trigger still worked, but this token probably lacks org runner image visibility." >&2
+            exit 0
           fi
 
-          if [[ "$api_failed" == 'false' ]]; then
+          if [[ -s "$RUNNER_TEMP/custom-images.json" ]]; then
             export IMAGE_NAME="$image_name"
             export IMAGE_VERSION="$image_version"
             export IMAGE_DEFINITION_ID="$image_definition_id"
@@ -224,22 +218,19 @@ jobs:
             Path(os.environ['RUNNER_TEMP'], 'resolved-image.json').write_text(json.dumps(resolved, indent=2, sort_keys=True))
             PY
 
-            resolved_file="$RUNNER_TEMP/resolved-image.json"
             resolved_image_definition_id="$(python3 -c "import json; print(json.load(open('$resolved_file'))['image_definition_id'])")"
             resolved_image_name="$(python3 -c "import json; print(json.load(open('$resolved_file'))['image_name'])")"
             resolved_image_platform="$(python3 -c "import json; print(json.load(open('$resolved_file'))['image_platform'])")"
             resolved_image_version="$(python3 -c "import json; print(json.load(open('$resolved_file'))['resolved_version'])")"
 
-            gh api \
+            if ! gh api \
               -H 'Accept: application/vnd.github+json' \
               "/orgs/${owner}/actions/hosted-runners/images/custom/${resolved_image_definition_id}/versions/${resolved_image_version}" > "$RUNNER_TEMP/image-version.json"
+            then
+              echo "Could not read the specific image version details. The image definition lookup succeeded, but this token still cannot read the version payload." >&2
+              exit 0
+            fi
 
-            echo "api_failed=false" >> "$GITHUB_OUTPUT"
-            echo "owner=${owner}" >> "$GITHUB_OUTPUT"
-            echo "image_name=${resolved_image_name}" >> "$GITHUB_OUTPUT"
-            echo "image_platform=${resolved_image_platform}" >> "$GITHUB_OUTPUT"
-            echo "image_version=${resolved_image_version}" >> "$GITHUB_OUTPUT"
-            echo "image_definition_id=${resolved_image_definition_id}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Write inspection summary
