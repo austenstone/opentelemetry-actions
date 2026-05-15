@@ -281,6 +281,10 @@ Compares telemetry across runner types.
 
 Builds the larger-runner custom image used for autonomous collector mode.
 
+### `.github/workflows/inspect-image-version.yml`
+
+Triggers on the `image_version` event for `otel-runner-base` version `1.*`, dumps the raw event payload, and attempts to resolve version details from the hosted-runners custom image REST API.
+
 ## Action inputs and outputs
 
 See `action.yml` for the complete contract.

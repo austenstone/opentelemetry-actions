@@ -1,0 +1,315 @@
+name: Inspect custom image version
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_owner:
+        description: Optional organization owner for the custom image APIs. Defaults to vars.CUSTOM_IMAGE_ORG, then github.repository_owner.
+        required: false
+        default: ''
+        type: string
+      image_name:
+        description: Optional image name override for manual inspection runs
+        required: false
+        default: otel-runner-base
+        type: string
+      image_version:
+        description: Optional image version override for manual inspection runs. Leave blank to resolve the latest version.
+        required: false
+        default: ''
+        type: string
+      image_definition_id:
+        description: Optional image definition ID override for manual inspection runs
+        required: false
+        default: ''
+        type: string
+  image_version:
+    names:
+      - otel-runner-base
+    versions:
+      - 1.*
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-image-version:
+    runs-on: ubuntu-latest
+    env:
+      DEFAULT_IMAGE_NAME: otel-runner-base
+      DEFAULT_VERSION_GLOB: 1.*
+      WORKFLOW_IMAGE_OWNER: ${{ vars.CUSTOM_IMAGE_ORG }}
+      DISPATCH_IMAGE_OWNER: ${{ github.event.inputs.image_owner || '' }}
+      DISPATCH_IMAGE_NAME: ${{ github.event.inputs.image_name || '' }}
+      DISPATCH_IMAGE_VERSION: ${{ github.event.inputs.image_version || '' }}
+      DISPATCH_IMAGE_DEFINITION_ID: ${{ github.event.inputs.image_definition_id || '' }}
+      CUSTOM_IMAGE_READ_TOKEN: ${{ secrets.CUSTOM_IMAGE_READ_TOKEN }}
+    steps:
+      - name: Show trigger context
+        run: |
+          cat <<EOF
+          event_name=${GITHUB_EVENT_NAME}
+          repository=${GITHUB_REPOSITORY}
+          ref=${GITHUB_REF}
+          sha=${GITHUB_SHA}
+          workflow=${GITHUB_WORKFLOW}
+          run_id=${GITHUB_RUN_ID}
+          run_attempt=${GITHUB_RUN_ATTEMPT}
+          event_path=${GITHUB_EVENT_PATH}
+          EOF
+
+      - name: Inspect raw image_version event payload
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          event_path = Path(os.environ['GITHUB_EVENT_PATH'])
+          payload = json.loads(event_path.read_text())
+          print('Raw event payload:')
+          print(json.dumps(payload, indent=2, sort_keys=True))
+
+          interesting_paths: list[str] = []
+
+          def visit(node: object, path: str) -> None:
+            if isinstance(node, dict):
+              lowered_keys = {str(key).lower() for key in node.keys()}
+              if {'name', 'version'} <= lowered_keys or any('image' in key for key in lowered_keys):
+                interesting_paths.append(path or '$')
+              for key, value in node.items():
+                child_path = f'{path}.{key}' if path else str(key)
+                visit(value, child_path)
+            elif isinstance(node, list):
+              for index, value in enumerate(node):
+                visit(value, f'{path}[{index}]')
+
+          visit(payload, '')
+          print('')
+          print('Interesting payload paths:')
+          if interesting_paths:
+            for path in interesting_paths:
+              print(f'- {path}')
+          else:
+            print('- none found, so GitHub is keeping this one mysterious')
+          PY
+
+      - name: Resolve custom image metadata via GitHub API
+        env:
+          GITHUB_TOKEN_FALLBACK: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          export GH_TOKEN="${CUSTOM_IMAGE_READ_TOKEN:-$GITHUB_TOKEN_FALLBACK}"
+          owner="${DISPATCH_IMAGE_OWNER:-${WORKFLOW_IMAGE_OWNER:-${GITHUB_REPOSITORY_OWNER}}}"
+
+          python3 <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          def first_value(*values: str) -> str:
+            for value in values:
+              if value:
+                return value
+            return ''
+
+          payload = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+
+          candidates = {
+            'image_name': first_value(os.environ.get('DISPATCH_IMAGE_NAME', ''), ''),
+            'image_version': first_value(os.environ.get('DISPATCH_IMAGE_VERSION', ''), ''),
+            'image_definition_id': first_value(os.environ.get('DISPATCH_IMAGE_DEFINITION_ID', ''), ''),
+          }
+
+          def record_from_dict(node: dict[str, object]) -> None:
+            lowered = {str(key).lower(): key for key in node.keys()}
+            name_key = next((lowered[key] for key in ('image_name', 'name') if key in lowered), None)
+            version_key = next((lowered[key] for key in ('image_version', 'version') if key in lowered), None)
+            id_key = next((lowered[key] for key in ('image_definition_id', 'id') if key in lowered), None)
+            if not candidates['image_name'] and name_key is not None:
+              value = node.get(name_key)
+              if isinstance(value, str):
+                candidates['image_name'] = value
+            if not candidates['image_version'] and version_key is not None:
+              value = node.get(version_key)
+              if isinstance(value, str):
+                candidates['image_version'] = value
+            if not candidates['image_definition_id'] and id_key is not None:
+              value = node.get(id_key)
+              if isinstance(value, (str, int)):
+                candidates['image_definition_id'] = str(value)
+
+          def visit(node: object) -> None:
+            if isinstance(node, dict):
+              record_from_dict(node)
+              for value in node.values():
+                visit(value)
+            elif isinstance(node, list):
+              for value in node:
+                visit(value)
+
+          visit(payload)
+          if not candidates['image_name']:
+            candidates['image_name'] = os.environ['DEFAULT_IMAGE_NAME']
+
+          out_path = Path(os.environ['RUNNER_TEMP']) / 'image-candidates.json'
+          out_path.write_text(json.dumps(candidates, indent=2, sort_keys=True))
+          print(out_path)
+          PY
+
+          candidate_file="$(tail -n 1 <<<"$(python3 <<'PY'
+          import os
+          print(os.path.join(os.environ['RUNNER_TEMP'], 'image-candidates.json'))
+          PY
+          )")"
+
+          image_name="$(python3 -c "import json; print(json.load(open('$candidate_file'))['image_name'])")"
+          image_version="$(python3 -c "import json; print(json.load(open('$candidate_file'))['image_version'])")"
+          image_definition_id="$(python3 -c "import json; print(json.load(open('$candidate_file'))['image_definition_id'])")"
+
+          echo "Resolved candidate image owner: ${owner}"
+          echo "Resolved candidate image name: ${image_name}"
+          echo "Resolved candidate image version: ${image_version:-<latest>}"
+          echo "Resolved candidate image definition id: ${image_definition_id:-<lookup required>}"
+
+          api_failed='false'
+          if ! gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "/orgs/${owner}/actions/hosted-runners/images/custom" > "$RUNNER_TEMP/custom-images.json"; then
+            api_failed='true'
+            echo "api_failed=true" >> "$GITHUB_OUTPUT"
+            echo "owner=${owner}" >> "$GITHUB_OUTPUT"
+            echo "image_name=${image_name}" >> "$GITHUB_OUTPUT"
+            echo "image_version=${image_version}" >> "$GITHUB_OUTPUT"
+            echo "image_definition_id=${image_definition_id}" >> "$GITHUB_OUTPUT"
+            echo "Could not read custom image definitions through the hosted-runners API. The trigger still worked, but this token probably lacks org runner image visibility." >&2
+          fi
+
+          if [[ "$api_failed" == 'false' ]]; then
+            export IMAGE_NAME="$image_name"
+            export IMAGE_VERSION="$image_version"
+            export IMAGE_DEFINITION_ID="$image_definition_id"
+
+            python3 <<'PY'
+            import json
+            import os
+            from pathlib import Path
+
+            images = json.loads(Path(os.environ['RUNNER_TEMP'], 'custom-images.json').read_text())
+            image_name = os.environ.get('IMAGE_NAME', '')
+            image_version = os.environ.get('IMAGE_VERSION', '')
+            image_definition_id = os.environ.get('IMAGE_DEFINITION_ID', '')
+
+            definitions = images.get('images', []) if isinstance(images, dict) else []
+            selected = None
+
+            if image_definition_id:
+              selected = next((item for item in definitions if str(item.get('id', '')) == image_definition_id), None)
+            if selected is None and image_name:
+              selected = next((item for item in definitions if item.get('name') == image_name), None)
+            if selected is None and definitions:
+              selected = definitions[0]
+
+            if selected is None:
+              raise SystemExit('No custom image definitions were returned by the hosted-runners API.')
+
+            resolved = {
+              'image_definition_id': str(selected.get('id', '')),
+              'image_name': str(selected.get('name', '')),
+              'image_platform': str(selected.get('platform', '')),
+              'latest_version': str(selected.get('latest_version', '')),
+              'resolved_version': image_version or str(selected.get('latest_version', '')),
+            }
+            Path(os.environ['RUNNER_TEMP'], 'resolved-image.json').write_text(json.dumps(resolved, indent=2, sort_keys=True))
+            PY
+
+            resolved_file="$RUNNER_TEMP/resolved-image.json"
+            resolved_image_definition_id="$(python3 -c "import json; print(json.load(open('$resolved_file'))['image_definition_id'])")"
+            resolved_image_name="$(python3 -c "import json; print(json.load(open('$resolved_file'))['image_name'])")"
+            resolved_image_platform="$(python3 -c "import json; print(json.load(open('$resolved_file'))['image_platform'])")"
+            resolved_image_version="$(python3 -c "import json; print(json.load(open('$resolved_file'))['resolved_version'])")"
+
+            gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/orgs/${owner}/actions/hosted-runners/images/custom/${resolved_image_definition_id}/versions/${resolved_image_version}" > "$RUNNER_TEMP/image-version.json"
+
+            echo "api_failed=false" >> "$GITHUB_OUTPUT"
+            echo "owner=${owner}" >> "$GITHUB_OUTPUT"
+            echo "image_name=${resolved_image_name}" >> "$GITHUB_OUTPUT"
+            echo "image_platform=${resolved_image_platform}" >> "$GITHUB_OUTPUT"
+            echo "image_version=${resolved_image_version}" >> "$GITHUB_OUTPUT"
+            echo "image_definition_id=${resolved_image_definition_id}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write inspection summary
+        if: always()
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          summary_path = Path(os.environ['GITHUB_STEP_SUMMARY'])
+          event_payload_path = Path(os.environ['GITHUB_EVENT_PATH'])
+          resolved_path = Path(os.environ['RUNNER_TEMP'], 'resolved-image.json')
+          version_path = Path(os.environ['RUNNER_TEMP'], 'image-version.json')
+
+          summary_lines = [
+            '# image_version inspection',
+            '',
+            f'- event: `{os.environ["GITHUB_EVENT_NAME"]}`',
+            f'- repository: `{os.environ["GITHUB_REPOSITORY"]}`',
+            f'- owner used for API lookup: `{os.environ.get("WORKFLOW_IMAGE_OWNER") or os.environ.get("DISPATCH_IMAGE_OWNER") or os.environ["GITHUB_REPOSITORY_OWNER"]}`',
+            f'- raw event payload: `{event_payload_path}`',
+          ]
+
+          if resolved_path.exists():
+            resolved = json.loads(resolved_path.read_text())
+            summary_lines.extend([
+              '',
+              '## Resolved image',
+              '',
+              f'- image name: `{resolved.get("image_name", "")}`',
+              f'- image definition id: `{resolved.get("image_definition_id", "")}`',
+              f'- platform: `{resolved.get("image_platform", "")}`',
+              f'- version: `{resolved.get("resolved_version", "")}`',
+              f'- latest version at lookup time: `{resolved.get("latest_version", "")}`',
+            ])
+
+          if version_path.exists():
+            version_details = json.loads(version_path.read_text())
+            trimmed = {
+              key: version_details.get(key)
+              for key in ('version', 'state', 'size_gb', 'created_on', 'state_details')
+              if key in version_details
+            }
+            summary_lines.extend([
+              '',
+              '## Image version details',
+              '',
+              '```json',
+              json.dumps(trimmed or version_details, indent=2, sort_keys=True),
+              '```',
+            ])
+          else:
+            summary_lines.extend([
+              '',
+              '## API lookup status',
+              '',
+              'No version details were fetched from the hosted-runners API.',
+              'If the trigger fired but this section is empty, set `CUSTOM_IMAGE_READ_TOKEN` to a token that can read organization hosted runner custom images.',
+            ])
+
+          summary_path.write_text('\n'.join(summary_lines) + '\n')
+          PY
+
+      - name: Print resolved image version payload
+        if: always()
+        run: |
+          if [[ -f "$RUNNER_TEMP/image-version.json" ]]; then
+            echo 'Resolved image version payload:'
+            cat "$RUNNER_TEMP/image-version.json"
+          else
+            echo 'No image version payload was fetched from the API.'
+          fi
