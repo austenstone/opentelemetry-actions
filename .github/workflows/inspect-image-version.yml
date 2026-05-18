@@ -68,25 +68,58 @@ jobs:
 
           echo "scope=$scope image_id=$image_id version=${version:-<latest>}"
 
-          echo "## Image definition" >> "$GITHUB_STEP_SUMMARY"
-          gh api "/$scope/actions/hosted-runners/images/custom/$image_id" | tee /tmp/image.json | jq .
-          echo '```json' >> "$GITHUB_STEP_SUMMARY"
-          cat /tmp/image.json >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          api() { gh api -H "Accept: application/vnd.github+json" "$@"; }
+          S="$GITHUB_STEP_SUMMARY"
 
-          # On dispatch, resolve latest version from the versions list
+          # --- Image definition ---
+          api "/$scope/actions/hosted-runners/images/custom/$image_id" > /tmp/image.json
+          jq . /tmp/image.json
+
+          {
+            echo "# 🖼️ Custom image: \`$(jq -r .name /tmp/image.json)\`"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            jq -r '
+              to_entries[]
+              | "| `\(.key)` | \(.value) |"
+            ' /tmp/image.json
+          } >> "$S"
+
+          # --- Resolve latest if dispatch ---
+          api "/$scope/actions/hosted-runners/images/custom/$image_id/versions" > /tmp/versions.json
           if [[ -z "$version" || "$version" == "null" ]]; then
-            gh api "/$scope/actions/hosted-runners/images/custom/$image_id/versions" > /tmp/versions.json
-            echo "## All versions" >> "$GITHUB_STEP_SUMMARY"
-            echo '```json' >> "$GITHUB_STEP_SUMMARY"
-            cat /tmp/versions.json >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
             version="$(jq -r '[.image_versions[]] | sort_by(.created_on) | last | .version' /tmp/versions.json)"
             echo "Resolved latest version: $version"
           fi
 
-          echo "## Image version $version" >> "$GITHUB_STEP_SUMMARY"
-          gh api "/$scope/actions/hosted-runners/images/custom/$image_id/versions/$version" | tee /tmp/version.json | jq .
-          echo '```json' >> "$GITHUB_STEP_SUMMARY"
-          cat /tmp/version.json >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # --- All versions table ---
+          {
+            echo
+            echo "## 📚 All versions"
+            echo
+            echo "| Version | State | Size (GB) | Created |"
+            echo "| --- | --- | ---: | --- |"
+            jq -r '
+              .image_versions
+              | sort_by(.created_on) | reverse
+              | .[]
+              | "| `\(.version)` | \(.state) | \(.size_gb) | \(.created_on) |"
+            ' /tmp/versions.json
+          } >> "$S"
+
+          # --- Specific version details ---
+          api "/$scope/actions/hosted-runners/images/custom/$image_id/versions/$version" > /tmp/version.json
+          jq . /tmp/version.json
+
+          {
+            echo
+            echo "## 🎯 Version \`$version\`"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            jq -r '
+              to_entries[]
+              | "| `\(.key)` | \(.value) |"
+            ' /tmp/version.json
+          } >> "$S"
