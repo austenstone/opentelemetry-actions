@@ -45,27 +45,45 @@ jobs:
       - name: Fetch image metadata from enterprise API
         env:
           GH_TOKEN: ${{ secrets.CUSTOM_IMAGE_READ_TOKEN || github.token }}
+          DEFAULT_SCOPE: enterprises/octodemo
+          DEFAULT_IMAGE_ID: "4543"
         run: |
           set -euo pipefail
-          owner_type="$(jq -r '.image_owner.type' "$GITHUB_EVENT_PATH")"
-          owner_name="$(jq -r '.image_owner.name' "$GITHUB_EVENT_PATH")"
-          image_id="$(jq -r '.image_version.image_id' "$GITHUB_EVENT_PATH")"
-          image_name="$(jq -r '.image_version.image_name' "$GITHUB_EVENT_PATH")"
-          version="$(jq -r '.image_version.version' "$GITHUB_EVENT_PATH")"
 
-          echo "owner_type=$owner_type owner=$owner_name image=$image_name id=$image_id version=$version"
+          if [[ "$GITHUB_EVENT_NAME" == "image_version" ]]; then
+            owner_type="$(jq -r '.image_owner.type' "$GITHUB_EVENT_PATH")"
+            owner_name="$(jq -r '.image_owner.name' "$GITHUB_EVENT_PATH")"
+            image_id="$(jq -r '.image_version.image_id' "$GITHUB_EVENT_PATH")"
+            version="$(jq -r '.image_version.version' "$GITHUB_EVENT_PATH")"
+            case "$owner_type" in
+              Enterprise)   scope="enterprises/$owner_name" ;;
+              Organization) scope="orgs/$owner_name" ;;
+              *) echo "Unknown owner type: $owner_type"; exit 1 ;;
+            esac
+          else
+            scope="$DEFAULT_SCOPE"
+            image_id="$DEFAULT_IMAGE_ID"
+            version=""
+          fi
 
-          case "$owner_type" in
-            Enterprise)   scope="enterprises/$owner_name" ;;
-            Organization) scope="orgs/$owner_name" ;;
-            *) echo "Unknown owner type: $owner_type"; exit 1 ;;
-          esac
+          echo "scope=$scope image_id=$image_id version=${version:-<latest>}"
 
           echo "## Image definition" >> "$GITHUB_STEP_SUMMARY"
           gh api "/$scope/actions/hosted-runners/images/custom/$image_id" | tee /tmp/image.json | jq .
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/image.json >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          # On dispatch, resolve latest version from the versions list
+          if [[ -z "$version" || "$version" == "null" ]]; then
+            gh api "/$scope/actions/hosted-runners/images/custom/$image_id/versions" > /tmp/versions.json
+            echo "## All versions" >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat /tmp/versions.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            version="$(jq -r '[.versions[]] | sort_by(.created_on) | last | .version' /tmp/versions.json)"
+            echo "Resolved latest version: $version"
+          fi
 
           echo "## Image version $version" >> "$GITHUB_STEP_SUMMARY"
           gh api "/$scope/actions/hosted-runners/images/custom/$image_id/versions/$version" | tee /tmp/version.json | jq .
