@@ -40,4 +40,35 @@ jobs:
           MATRIX_CONTEXT: ${{ toJson(matrix) }}
         run: echo "$MATRIX_CONTEXT"
       - name: Dump raw event payload
-        run: cat "$GITHUB_EVENT_PATH"
+        run: cat "$GITHUB_EVENT_PATH" | jq .
+
+      - name: Fetch image metadata from enterprise API
+        env:
+          GH_TOKEN: ${{ secrets.CUSTOM_IMAGE_READ_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          owner_type="$(jq -r '.image_owner.type' "$GITHUB_EVENT_PATH")"
+          owner_name="$(jq -r '.image_owner.name' "$GITHUB_EVENT_PATH")"
+          image_id="$(jq -r '.image_version.image_id' "$GITHUB_EVENT_PATH")"
+          image_name="$(jq -r '.image_version.image_name' "$GITHUB_EVENT_PATH")"
+          version="$(jq -r '.image_version.version' "$GITHUB_EVENT_PATH")"
+
+          echo "owner_type=$owner_type owner=$owner_name image=$image_name id=$image_id version=$version"
+
+          case "$owner_type" in
+            Enterprise)   scope="enterprises/$owner_name" ;;
+            Organization) scope="orgs/$owner_name" ;;
+            *) echo "Unknown owner type: $owner_type"; exit 1 ;;
+          esac
+
+          echo "## Image definition" >> "$GITHUB_STEP_SUMMARY"
+          gh api "/$scope/actions/hosted-runners/images/custom/$image_id" | tee /tmp/image.json | jq .
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/image.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          echo "## Image version $version" >> "$GITHUB_STEP_SUMMARY"
+          gh api "/$scope/actions/hosted-runners/images/custom/$image_id/versions/$version" | tee /tmp/version.json | jq .
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/version.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
