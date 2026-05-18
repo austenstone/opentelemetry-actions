@@ -67,25 +67,9 @@ jobs:
           fi
 
           echo "scope=$scope image_id=$image_id version=${version:-<latest>}"
-          echo "token_len=${#GH_TOKEN} prefix=${GH_TOKEN:0:4} suffix=${GH_TOKEN: -4}"
-          echo "== whoami =="
-          curl -sS -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/user | jq '{login,id}'
-          echo "== token scopes (X-OAuth-Scopes header) =="
-          curl -sS -I -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/user | grep -i "x-oauth-scopes\|x-accepted"
-          echo "== curl with verbose status =="
-          curl -sS -D /tmp/headers -o /tmp/image.json \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/$scope/actions/hosted-runners/images/custom/$image_id"
-          echo "-- headers --"
-          cat /tmp/headers
-          echo "-- body --"
-          cat /tmp/image.json
-          echo
 
           echo "## Image definition" >> "$GITHUB_STEP_SUMMARY"
-          cat /tmp/image.json | jq .
+          gh api "/$scope/actions/hosted-runners/images/custom/$image_id" | tee /tmp/image.json | jq .
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/image.json >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
@@ -97,7 +81,7 @@ jobs:
             echo '```json' >> "$GITHUB_STEP_SUMMARY"
             cat /tmp/versions.json >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
-            version="$(jq -r '[.versions[]] | sort_by(.created_on) | last | .version' /tmp/versions.json)"
+            version="$(jq -r '[.image_versions[]] | sort_by(.created_on) | last | .version' /tmp/versions.json)"
             echo "Resolved latest version: $version"
           fi
 
