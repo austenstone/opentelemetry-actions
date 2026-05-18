@@ -67,8 +67,11 @@ jobs:
           fi
 
           echo "scope=$scope image_id=$image_id version=${version:-<latest>}"
-          echo "token_len=${#GH_TOKEN}"
-
+          echo "token_len=${#GH_TOKEN} prefix=${GH_TOKEN:0:4} suffix=${GH_TOKEN: -4}"
+          echo "== whoami =="
+          curl -sS -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/user | jq '{login,id}'
+          echo "== token scopes (X-OAuth-Scopes header) =="
+          curl -sS -I -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/user | grep -i "x-oauth-scopes\|x-accepted"
           echo "== curl with verbose status =="
           curl -sS -D /tmp/headers -o /tmp/image.json \
             -H "Authorization: Bearer $GH_TOKEN" \
